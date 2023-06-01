@@ -1,0 +1,20 @@
+def inception_block_names():
+    layer_randomization_order = ['origin',
+                                 'fc',
+                                 'Mixed_7c',
+                                 'Mixed_7b',
+                                 'Mixed_7a',
+                                 'Mixed_6e',
+                                 'Mixed_6d',
+                                 'Mixed_6c',
+                                 'Mixed_6b',
+                                 'Mixed_6a',
+                                 'Mixed_5d',
+                                 'Mixed_5c',
+                                 'Mixed_5b',
+                                 'Conv2d_4a_3x3',
+                                 'Conv2d_3b_1x1',
+                                 'Conv2d_2b_3x3',
+                                 'Conv2d_2a_3x3',
+                                 'Conv2d_1a_3x3']
+    return layer_randomization_order
