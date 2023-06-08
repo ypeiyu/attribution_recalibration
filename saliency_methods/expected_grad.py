@@ -233,9 +233,7 @@ class ExpectedGradients(object):
             ones = torch.ones(grad_tensor.shape).cuda()
             mult_grads = grad_tensor * samples_delta
             sign = torch.where(mult_grads >= 0., ones, zeros)
-            # ig-sq
             mult_grads = mult_grads * sign
-            # mult_grads = torch.pow(mult_grads, 2.) * sign
 
             counts = torch.sum(sign, dim=1)
             mult_grads = mult_grads.sum(1) / torch.where(counts == 0., ones[:, 0], counts)
@@ -243,9 +241,7 @@ class ExpectedGradients(object):
         else:
             samples_delta = self._get_samples_delta(input_tensor, reference_tensor)
             grad_tensor = self._get_grads(samples_input, sparse_labels)
-            # ig-sq
-            # mult_grads = samples_delta * grad_tensor if self.scale_by_inputs else grad_tensor
-            mult_grads = samples_delta * torch.pow(grad_tensor, 2.) if self.scale_by_inputs else torch.pow(grad_tensor, 2.)
+            mult_grads = samples_delta * grad_tensor if self.scale_by_inputs else grad_tensor
 
             expected_grads = mult_grads.mean(1)
 

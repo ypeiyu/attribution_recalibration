@@ -10,18 +10,7 @@ import numpy as np
 from utils import undo_preprocess_input_function
 import cv2
 
-
 DEFAULT_DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-
-def single_img_inspection(img, file_name):
-    image_set = img.detach().cpu().numpy()
-    for i in range(image_set.shape[0]):
-        image = image_set[i] * 255
-        image = image.astype(np.uint8)
-        image = np.transpose(image, [1, 2, 0])
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        cv2.imwrite(file_name+'img'+str(i)+'.jpg', image)
 
 
 def gather_nd(params, indices):
@@ -176,24 +165,6 @@ class ExpectedGradients(object):
         shape = list(input_tensor.shape)
         shape.insert(1, self.k*self.bg_size)
 
-        # ================= expected gradients ==================
-        # reference_tensor = torch.zeros(shape).float().to(DEFAULT_DEVICE)
-        # ref = self._get_ref_batch()
-        # for bth in range(shape[0]):
-        #     for bg in range(self.bg_size):
-        #         ref_ = ref[bth * self.bg_size + bg]
-        #         reference_tensor[bth, bg*self.k:(bg+1)*self.k, :] = ref_
-        # if ref.shape[0] != input_tensor.shape[0]*self.k:
-        #     reference_tensor = reference_tensor[:input_tensor.shape[0]*self.k]
-        # =======================================================
-
-        # =============== IG + Uni ==================
-        # from utils import preprocess_input_function
-        # ref_lst = [preprocess_input_function(torch.rand(*input_tensor.shape)) for _ in range(self.k*self.bg_size)]
-        # ref = torch.cat(ref_lst)
-        # reference_tensor = ref.view(*shape).cuda()
-        # ============================================
-
         # =============== IG + SmoothGrad ==================
         from utils.preprocess import preprocess, undo_preprocess
         input_tensor = undo_preprocess(input_tensor)
@@ -207,9 +178,6 @@ class ExpectedGradients(object):
         input_tensor = preprocess(input_tensor)
         reference_tensor = reference_tensor.view(*shape)
 
-        # ============================================
-        # single_img_inspection(input_tensor[0].unsqueeze(0), 'exp_fig/img_inspection/')
-
         samples_input = self._get_samples_input(input_tensor, reference_tensor)
 
         if self.cal_type == 'valid_intp':
@@ -219,9 +187,7 @@ class ExpectedGradients(object):
             grad_ori_tensor = grad_ori_tensor.reshape(samples_delta.shape)
             mult_grads = grad_ori_tensor * samples_delta
             grad_sign = torch.where(mult_grads >= 0., 1., 0.)
-            # ig-sq
             mult_grads = mult_grads * grad_sign
-            # mult_grads = torch.pow(mult_grads, 2.) * grad_sign
 
             counts = torch.sum(grad_sign, dim=1)
             mult_grads = mult_grads.sum(1) / torch.where(counts == 0., torch.ones(counts.shape).cuda(), counts)
@@ -233,7 +199,6 @@ class ExpectedGradients(object):
             ones = torch.ones(grad_tensor.shape).cuda()
             mult_grads = grad_tensor * samples_delta
             sign = torch.where(mult_grads >= 0., ones, zeros)
-            # ig-sq
             mult_grads = torch.pow(mult_grads, 2.) * sign
 
             counts = torch.sum(sign, dim=1)
@@ -243,7 +208,7 @@ class ExpectedGradients(object):
             samples_delta = self._get_samples_delta(input_tensor, reference_tensor)
             grad_tensor = self._get_grads(samples_input, sparse_labels)
             # ig-sq
-            mult_grads = samples_delta * torch.pow(grad_tensor, 2.) if self.scale_by_inputs else torch.pow(grad_tensor, 2.)
+            mult_grads = samples_delta * grad_tensor if self.scale_by_inputs else grad_tensor
 
             expected_grads = mult_grads.mean(1)
 
