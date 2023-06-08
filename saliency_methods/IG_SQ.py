@@ -6,10 +6,6 @@ import torch
 from torch.autograd import grad
 import torch.utils.data
 
-import numpy as np
-from utils import undo_preprocess_input_function
-import cv2
-
 DEFAULT_DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
@@ -165,7 +161,6 @@ class ExpectedGradients(object):
         shape = list(input_tensor.shape)
         shape.insert(1, self.k*self.bg_size)
 
-        # =============== IG + SmoothGrad ==================
         from utils.preprocess import preprocess, undo_preprocess
         input_tensor = undo_preprocess(input_tensor)
         std_factor = 0.15
@@ -191,7 +186,7 @@ class ExpectedGradients(object):
 
             counts = torch.sum(grad_sign, dim=1)
             mult_grads = mult_grads.sum(1) / torch.where(counts == 0., torch.ones(counts.shape).cuda(), counts)
-            expected_grads = mult_grads
+            attribution = mult_grads
         elif self.cal_type == 'valid_ref':
             samples_delta = self._get_samples_delta(input_tensor, reference_tensor)
             grad_tensor = self._get_grads(samples_input, sparse_labels)
@@ -203,12 +198,12 @@ class ExpectedGradients(object):
 
             counts = torch.sum(sign, dim=1)
             mult_grads = mult_grads.sum(1) / torch.where(counts == 0., ones[:, 0], counts)
-            expected_grads = mult_grads
+            attribution = mult_grads
         else:
             samples_delta = self._get_samples_delta(input_tensor, reference_tensor)
             grad_tensor = self._get_grads(samples_input, sparse_labels)
             mult_grads = samples_delta * torch.pow(grad_tensor, 2.) if self.scale_by_inputs else torch.pow(grad_tensor, 2.)
 
-            expected_grads = mult_grads.mean(1)
+            attribution = mult_grads.mean(1)
 
-        return expected_grads
+        return attribution

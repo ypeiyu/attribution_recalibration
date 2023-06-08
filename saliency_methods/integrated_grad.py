@@ -2,11 +2,8 @@
 import functools
 import operator
 
-import matplotlib.pyplot as plt
-import numpy as np
 import torch
 from torch.autograd import grad
-from torch.utils.data import DataLoader
 
 DEFAULT_DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -41,18 +38,6 @@ def gather_nd(params, indices):
     return torch.take(params, idx)
 
 
-from utils import undo_preprocess_input_function
-import cv2
-def single_img_inspection(img, file_name):
-    image_set = undo_preprocess_input_function(img).detach().cpu().numpy()
-    for i in range(image_set.shape[0]):
-        image = image_set[i] * 255
-        image = image.astype(np.uint8)
-        image = np.transpose(image, [1, 2, 0])
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        cv2.imwrite(file_name+'img'+str(i)+'.jpg', image)
-
-
 class IntegratedGradients(object):
     def __init__(self, model, k=1, scale_by_inputs=True):
         self.model = model
@@ -84,10 +69,10 @@ class IntegratedGradients(object):
         k_ = self.k
 
         # Grab a [batch_size, k]-sized interpolation sample
-        # if k_ == 1:
-        #     t_tensor = torch.cat([torch.Tensor([1.0]) for _ in range(batch_size)]).to(DEFAULT_DEVICE)
-        # else:
-        t_tensor = torch.cat([torch.linspace(0, 1, k_) for _ in range(batch_size)]).to(DEFAULT_DEVICE)
+        if k_ == 1:
+            t_tensor = torch.cat([torch.Tensor([1.0]) for _ in range(batch_size)]).to(DEFAULT_DEVICE)
+        else:
+            t_tensor = torch.cat([torch.linspace(0, 1, k_) for _ in range(batch_size)]).to(DEFAULT_DEVICE)
 
         shape = [batch_size, k_] + [1] * num_input_dims
         interp_coef = t_tensor.view(*shape)
@@ -100,7 +85,6 @@ class IntegratedGradients(object):
         # A fine Affine Combine
         samples_input = end_point_input + end_point_ref
 
-        # single_img_inspection(samples_input.view(-1,3,224,224), 'exp_fig/test/')
         return samples_input
 
     def _get_samples_delta(self, input_tensor, reference_tensor):
@@ -124,13 +108,7 @@ class IntegratedGradients(object):
             output = self.model(particular_slice)  # [5, 200] [5, 2000]
             # origin
             # output = - torch.softmax(output, 1)
-            # soft: [0.134, 0.174, 0.198, 0.238, 0.24, 0.256, 0.259, 0.208, 0.095]
-            # ori: [0.126, 0.153, 0.164, 0.232, 0.255, 0.245, 0.279, 0.195, 0.098]
-
             # output = - torch.log_softmax(output, 1)
-
-            # import torch.nn.functional as F
-            # agg = - F.nll_loss(outputs, target_class, reduction='sum')
 
             batch_output = output
 
@@ -167,76 +145,18 @@ class IntegratedGradients(object):
         shape = list(input_tensor.shape)
         shape.insert(1, self.k)
 
-        # =============== original ==================
-        # reference_tensor = torch.zeros(*input_tensor.shape).cuda().to(DEFAULT_DEVICE)
-        # from utils import preprocess_input_function
-        # reference_tensor = preprocess_input_function(reference_tensor)
-        # reference_tensor = reference_tensor.repeat([self.k, 1, 1, 1])
-        # reference_tensor = reference_tensor.view(shape)
-
-        # =============== Gaussian noise (x) ==================
-        # # k equal Gaussian noise for each input
-        # std_dev = 0.15 * (input_tensor.max().item() - input_tensor.min().item())
-        # noise = torch.normal(mean=torch.zeros_like(input_tensor).cuda(), std=std_dev)
-        # noise = noise.repeat(1, self.k, 1, 1, 1)
-        # reference_tensor = noise.view(*shape).cuda()
-
-        # =============== Uniform noise (v) ==================
-        # k equal Uniform noise for each input
+        reference_tensor = torch.zeros(*input_tensor.shape).cuda().to(DEFAULT_DEVICE)
         from utils import preprocess_input_function
-        noise = preprocess_input_function(torch.rand(*input_tensor.shape))
-        noise = noise.repeat(1, self.k, 1, 1, 1)
-        reference_tensor = noise.view(*shape).cuda()
-
-        # =============== smoothgrad (v) ==================
-        # k equal Gaussian noise on input for each input
-        std_dev = 0.15 * (input_tensor.max().item() - input_tensor.min().item())
-        noise = torch.normal(mean=torch.zeros_like(input_tensor).cuda(), std=std_dev)
-        reference_tensor = (input_tensor + noise).repeat(1, self.k, 1, 1, 1)
-        reference_tensor = reference_tensor.view(*shape).cuda()
-
+        reference_tensor = preprocess_input_function(reference_tensor)
+        reference_tensor = reference_tensor.repeat([self.k, 1, 1, 1])
+        reference_tensor = reference_tensor.view(shape)
 
         samples_input = self._get_samples_input(input_tensor, reference_tensor)
-        # samples_delta = self._get_samples_delta(input_tensor, reference_tensor)
         samples_delta = self._get_samples_inter_delta(samples_input, reference_tensor)
         grad_tensor = self._get_grads(samples_input, sparse_labels)
 
         # ------------ original ------------
-        # mult_grads = samples_delta * grad_tensor if self.scale_by_inputs else grad_tensor
-        # expected_grads = mult_grads.mean(1)
+        mult_grads = samples_delta * grad_tensor if self.scale_by_inputs else grad_tensor
+        attribution = mult_grads.mean(1)
 
-        # ----------------------- calculate values that are calculated from same direction ------------------------
-        zeros = torch.zeros(grad_tensor.shape).cuda()
-        ones = torch.ones(grad_tensor.shape).cuda()
-        # ==================== case 0: All =======================
-        mult_grads = grad_tensor * samples_delta
-        # =================== case 1: overlap (resides on path) ===================
-        sign = torch.where(mult_grads >= 0., ones, zeros)
-        # =================== case 2: negative numbers ===================
-        all_neg = torch.where(mult_grads < 0., ones, zeros)
-
-        mult_grads = mult_grads * sign
-        counts = torch.sum(all_neg, dim=1)
-        mult_grads = mult_grads.sum(1) / torch.where(counts == 0., ones[:, 0], counts)
-        # [0.643, 0.712, 0.735, 0.73, 0.698, 0.666, 0.558, 0.391, 0.194] new sum
-        # [0.647, 0.727, 0.732, 0.729, 0.696, 0.641, 0.557, 0.395, 0.216] new mean yeah its actually have similar effect
-        # [0.569, 0.624, 0.668, 0.688, 0.679, 0.613, 0.555, 0.388, 0.229] mean by count
-        # [0.731, 0.793, 0.797, 0.782, 0.725, 0.633, 0.535, 0.42, 0.201] mean by neg count
-
-        # [0.703, 0.78, 0.81, 0.796, 0.769, 0.689, 0.595, 0.444, 0.236] old sum
-        # [0.611, 0.7, 0.721, 0.727, 0.727, 0.689, 0.602, 0.45, 0.246] old / neg_num
-        # [0.691, 0.772, 0.793, 0.798, 0.766, 0.715, 0.598, 0.431, 0.223]
-
-        # [0.637, 0.731, 0.783, 0.784, 0.743, 0.694, 0.631, 0.483, 0.276] uniform noise
-        # [0.676, 0.752, 0.799, 0.775, 0.758, 0.686, 0.63, 0.462, 0.268] uniform noise / neg_num
-
-        # [0.705, 0.778, 0.796, 0.797, 0.757, 0.674, 0.578, 0.456, 0.252] uniform noise * new delta / neg_num
-        # [0.583, 0.67, 0.711, 0.722, 0.72, 0.671, 0.575, 0.456, 0.216] uniform noise * new delta / pos_num
-
-        # [0.682, 0.757, 0.764, 0.758, 0.731, 0.696, 0.581, 0.451, 0.235] uniform different noise * new delta / neg_num
-        # [0.601, 0.668, 0.696, 0.711, 0.702, 0.67, 0.587, 0.447, 0.237] uniform different noise * new delta / pos_num
-
-        # [0.678, 0.764, 0.798, 0.808, 0.781, 0.683, 0.595, 0.489, 0.274] uniform / neg_num
-        expected_grads = mult_grads
-
-        return expected_grads
+        return attribution

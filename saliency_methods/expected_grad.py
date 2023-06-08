@@ -6,22 +6,7 @@ import torch
 from torch.autograd import grad
 import torch.utils.data
 
-import numpy as np
-from utils import undo_preprocess_input_function
-import cv2
-
-
 DEFAULT_DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-
-def single_img_inspection(img, file_name):
-    image_set = img.detach().cpu().numpy()
-    for i in range(image_set.shape[0]):
-        image = image_set[i] * 255
-        image = image.astype(np.uint8)
-        image = np.transpose(image, [1, 2, 0])
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        cv2.imwrite(file_name+'img'+str(i)+'.jpg', image)
 
 
 def gather_nd(params, indices):
@@ -177,38 +162,14 @@ class ExpectedGradients(object):
         shape.insert(1, self.k*self.bg_size)
 
         # ================= expected gradients ==================
-        # reference_tensor = torch.zeros(shape).float().to(DEFAULT_DEVICE)
-        # ref = self._get_ref_batch()
-        # for bth in range(shape[0]):
-        #     for bg in range(self.bg_size):
-        #         ref_ = ref[bth * self.bg_size + bg]
-        #         reference_tensor[bth, bg*self.k:(bg+1)*self.k, :] = ref_
-        # if ref.shape[0] != input_tensor.shape[0]*self.k:
-        #     reference_tensor = reference_tensor[:input_tensor.shape[0]*self.k]
-        # =======================================================
-
-        # =============== IG + Uni ==================
-        # from utils import preprocess_input_function
-        # ref_lst = [preprocess_input_function(torch.rand(*input_tensor.shape)) for _ in range(self.k*self.bg_size)]
-        # ref = torch.cat(ref_lst)
-        # reference_tensor = ref.view(*shape).cuda()
-        # ============================================
-
-        # =============== IG + SmoothGrad ==================
-        from utils.preprocess import preprocess, undo_preprocess
-        input_tensor = undo_preprocess(input_tensor)
-        std_factor = 0.15
-        std_dev = std_factor * (input_tensor.max().item() - input_tensor.min().item())
-        ref_lst = [torch.normal(mean=torch.zeros_like(input_tensor), std=std_dev).cuda() for _ in range(self.k*self.bg_size)]
-        reference_tensor = torch.cat(ref_lst).view(*shape)
-        reference_tensor += input_tensor.unsqueeze(1)
-        reference_tensor = torch.clamp(reference_tensor, min=0., max=1.)
-        reference_tensor = preprocess(reference_tensor.reshape(-1, shape[-3], shape[-2], shape[-1]))
-        input_tensor = preprocess(input_tensor)
-        reference_tensor = reference_tensor.view(*shape)
-
-        # ============================================
-        # single_img_inspection(input_tensor[0].unsqueeze(0), 'exp_fig/img_inspection/')
+        reference_tensor = torch.zeros(shape).float().to(DEFAULT_DEVICE)
+        ref = self._get_ref_batch()
+        for bth in range(shape[0]):
+            for bg in range(self.bg_size):
+                ref_ = ref[bth * self.bg_size + bg]
+                reference_tensor[bth, bg*self.k:(bg+1)*self.k, :] = ref_
+        if ref.shape[0] != input_tensor.shape[0]*self.k:
+            reference_tensor = reference_tensor[:input_tensor.shape[0]*self.k]
 
         samples_input = self._get_samples_input(input_tensor, reference_tensor)
 
@@ -219,13 +180,11 @@ class ExpectedGradients(object):
             grad_ori_tensor = grad_ori_tensor.reshape(samples_delta.shape)
             mult_grads = grad_ori_tensor * samples_delta
             grad_sign = torch.where(mult_grads >= 0., 1., 0.)
-            # ig-sq
             mult_grads = mult_grads * grad_sign
-            # mult_grads = torch.pow(mult_grads, 2.) * grad_sign
 
             counts = torch.sum(grad_sign, dim=1)
             mult_grads = mult_grads.sum(1) / torch.where(counts == 0., torch.ones(counts.shape).cuda(), counts)
-            expected_grads = mult_grads
+            attribution = mult_grads
         elif self.cal_type == 'valid_ref':
             samples_delta = self._get_samples_delta(input_tensor, reference_tensor)
             grad_tensor = self._get_grads(samples_input, sparse_labels)
@@ -237,12 +196,12 @@ class ExpectedGradients(object):
 
             counts = torch.sum(sign, dim=1)
             mult_grads = mult_grads.sum(1) / torch.where(counts == 0., ones[:, 0], counts)
-            expected_grads = mult_grads
+            attribution = mult_grads
         else:
             samples_delta = self._get_samples_delta(input_tensor, reference_tensor)
             grad_tensor = self._get_grads(samples_input, sparse_labels)
             mult_grads = samples_delta * grad_tensor if self.scale_by_inputs else grad_tensor
 
-            expected_grads = mult_grads.mean(1)
+            attribution = mult_grads.mean(1)
 
-        return expected_grads
+        return attribution
