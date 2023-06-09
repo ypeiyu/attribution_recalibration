@@ -298,9 +298,6 @@ class AGI(object):
 
             step_grad += delta
 
-        adv_ex = step_grad  # .squeeze().detach().cpu().numpy()  # / topk
-        # img = data  # .squeeze().detach().cpu().numpy()
-        # example = (init_pred.item(), img, adv_ex)
+        attribution = step_grad
 
-        # Return prediction, original image, and heatmap
-        return adv_ex
+        return attribution
