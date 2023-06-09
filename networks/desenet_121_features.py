@@ -20,7 +20,6 @@ class _DenseLayer(nn.Sequential):
         self.add_module("conv2", nn.Conv2d(bn_size * growth_rate, growth_rate,  ##  3x3卷积
                                            kernel_size=3, padding=1, bias=False))
 
-    ##  重载forward函数
     def forward(self, x):
         new_features = super(_DenseLayer, self).forward(x)  ##  这段的意思是调用所有add_module添加到一个Sequential模块中
         return torch.cat([x, new_features], 1)
@@ -50,10 +49,8 @@ class DenseNet(nn.Module):
                  bn_size=4, theta=0.5, num_classes=10):
         super(DenseNet, self).__init__()
 
-        ##  初始的卷积为filter: 2倍的growth_rate
         num_init_filture = 2 * growth_rate
 
-        ##  表示如果是CIFAR-10数据集
         if num_classes == 10:
             self.features = nn.Sequential(OrderedDict([
                 ('conv0', nn.Conv2d(3, num_init_filture,
