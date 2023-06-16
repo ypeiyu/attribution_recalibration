@@ -37,7 +37,7 @@ def gather_nd(params, indices):
 
 
 class IntGrad(object):
-    def __init__(self, model, k, bg_size, random_alpha=True, scale_by_inputs=True, cal_type=['nano', 'valid_ref', 'valid_intp'][0]):
+    def __init__(self, model, k, bg_size, random_alpha=True, scale_by_inputs=True, cal_type=['vanilla', 'valid_ref', 'valid_intp'][0]):
         self.model = model
         self.model.eval()
         self.k = k
