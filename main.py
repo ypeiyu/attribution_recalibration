@@ -14,7 +14,7 @@ from torchvision import models
 from utils.settings import img_size
 from utils.preprocess import LSVRC_mean, LSVRC_std
 mean, std = LSVRC_mean, LSVRC_std
-from saliency_methods import Gradients, IntegratedGradients, ExpectedGradients, CompleteIntegratedGradients, SmoothGrad, FullGrad, AGI, RandomBaseline
+from saliency_methods import Gradients, IntegratedGradients, ExpectedGradients, SmoothGrad, FullGrad, AGI, RandomBaseline
 from explain_exp import ExplainerExp
 from networks.MLP import Model
 from networks.preact_resnet import PreActResNet18
@@ -27,6 +27,25 @@ cifar100_std = (0.2673342858792401, 0.2564384629170883, 0.27615047132568404)
 
 cifar10_mean = (0.4914, 0.4822, 0.4465)
 cifar10_std = (0.2471, 0.2435, 0.2616)
+
+
+from utils.settings import parser_choices, parser_default
+parser.add_argument('-attr_method', type=str, required=False,
+                    choices=parser_choices['attr_method'],
+                    default=parser_default['attr_method'])
+parser.add_argument('-model', type=str, required=False,
+                    choices=parser_choices['model'],
+                    default=parser_default['model'])
+parser.add_argument('-dataset', type=str, required=False,
+                    choices=parser_choices['dataset'],
+                    default=parser_default['dataset'])
+parser.add_argument('-metric', type=str, required=False,
+                    choices=parser_choices['metric'],
+                    default=parser_default['metric'])
+parser.add_argument('-k', type=int,  required=False,
+                    default=parser_default['k'])
+parser.add_argument('-bg_size', type=int,  required=False,
+                    default=parser_default['bg_size'])
 
 
 def load_explainer(model, **kwargs):
@@ -227,7 +246,7 @@ def evaluate(method_name, model_name, dataset_name, metric, k=None, bg_size=None
         explainer_args[method_name]['k'] = k
         explainer_args[method_name]['bg_size'] = bg_size
 
-    if metric == 'Sanity_check':
+    if metric == 'sanity_check':
         if dataset_name == 'MNIST':
 
             saliency_map_lst = []
@@ -306,7 +325,6 @@ def evaluate(method_name, model_name, dataset_name, metric, k=None, bg_size=None
             explain_exp.perturb_exp(baseline_name='mean', q_ratio_lst=[step * 0.1 for step in range(1, 10)])
 
 
-
 if __name__ == '__main__':
-    evaluate(method_name=method, model_name='resnet34', dataset_name='ImageNet_vis', metric='pixel_perturb', bg_size=bg_size)
-
+    evaluate(method_name=args.attr_method, model_name=args.model, dataset_name=args.dataset, metric=args.metric,
+             k=args.k, bg_size=args.bg_size)
