@@ -25,7 +25,7 @@ Trustworthy machine learning necessitates meticulous regulation of model relianc
 
 ### Step 1: Preparing dataset.
 ```
-dataset\IMAGENET
+dataset\DATASET
 ```
 
 ### Step 2: Preparing models.
