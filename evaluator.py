@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import os
 
 from utils import undo_preprocess_input_function
-from utils import visualize, saliency_abs_norm
+from utils import visualize
 
 import functools
 import operator
@@ -225,33 +225,14 @@ class Evaluator(object):
         # print('valid interpolations')
         # print(self.pos_num/(224*224*3*1000))
 
-    def visual_inspection(self, file_name, num_vis, method_name, centers=None):
+    def visual_inspection(self, file_name, num_vis, method_name):
         for batch_num, (image, label) in enumerate(self.dataloader):
-            print(label)
-            print(num_vis)
             if (batch_num*image.shape[0]) >= num_vis:
                 break
             image = image.cuda()
             target = label.cuda()
 
-            # image_id = 188  # 188
-            # # target = target * 0 + image_id  # figure 1
-            # if image_id in target:
-            #     index = (target == image_id).nonzero(as_tuple=True)
-            #     target = torch.tensor([image_id]).cuda()
-            #     image = image[int(index[0]):int(index[0])+1]
-            # else: continue
-
-            output = self.model(image).detach()
-
-            if centers is not None:
-                # ---------------- LPI ---------------------
-                output_array = output.cpu().numpy()
-                clu_lst = [np.argmin(np.linalg.norm(centers - output_array[bth], axis=1)) for bth in range(output.shape[0])]
-                saliency_map = self.explainer.shap_values(image, sparse_labels=target, centers=clu_lst)
-            else:
-                saliency_map = self.explainer.shap_values(image, sparse_labels=target)
-            # saliency_map = normalize_saliency_map(saliency_map.detach())
+            saliency_map = self.explainer.shap_values(image, sparse_labels=target)
 
             if 'MLP' in file_name:
                 image = image.detach().cpu().numpy()
@@ -273,25 +254,9 @@ class Evaluator(object):
             image = image.cuda()
             target = label.cuda()
 
-            # output = self.model(image).detach()
-
             saliency_map = self.explainer.shap_values(image, sparse_labels=target)
-
-            # saliency_map = torch.sum(torch.abs(saliency_map), dim=1, keepdim=True)
-            # flat_s = saliency_map.view((saliency_map.size(0), -1))
-            # temp, _ = flat_s.min(1, keepdim=True)
-            # saliency_map = saliency_map - temp.unsqueeze(1).unsqueeze(1)
-            # flat_s = saliency_map.view((saliency_map.size(0), -1))
-            # temp, _ = flat_s.max(1, keepdim=True)
-            # saliency_map = saliency_map / (temp.unsqueeze(1).unsqueeze(1) + 1e-10)
-
             saliency_map = saliency_map.data.cpu().numpy()
-
-
-
-            # for bth in range(image.shape[0]):
-            #     saliency_norm = saliency_abs_norm(saliency_map=saliency_map[bth])
-            #     saliency_norm_lst.append(saliency_norm)
+            saliency_map = normalize_saliency_map(saliency_map.detach())
 
             saliency_norm_lst.append(saliency_map)
         return np.array(saliency_norm_lst)
