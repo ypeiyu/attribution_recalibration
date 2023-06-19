@@ -40,12 +40,13 @@ def gather_nd(params, indices):
 
 
 class AGI(object):
-    def __init__(self, model, k, top_k, cls_num, eps=0.05, cal_type=['vanilla', 'valid_ref', 'valid_intp'][0]):
+    def __init__(self, model, k, top_k, cls_num, eps=0.05, scale_by_input=False, cal_type=['vanilla', 'valid_ref', 'valid_intp'][0]):
         self.model = model
         self.cls_num = cls_num - 1
         self.eps = eps
         self.k = k
         self.top_k = top_k
+        self.scale_by_input = scale_by_input
         self.cal_type = cal_type
 
     def select_id(self, label):
@@ -149,8 +150,26 @@ class AGI(object):
             targeted = top_ids[:, l].cuda()
             delta = self.pgd_step(undo_preprocess(input_tensor), self.eps, self.model, init_pred, targeted, self.k)
 
-            step_grad += delta
+            if self.cal_type == 'valid_intp':
+                delta = delta / torch.where(delta == 0., 1., sign)
+                step_grad += delta
+                attribution = step_grad
+            elif self.cal_type == 'valid_ref':
+                samples_delta = self._get_samples_delta(input_tensor, reference_tensor)
+                grad_tensor = self._get_grads(samples_input, sparse_labels)
+                zeros = torch.zeros(grad_tensor.shape).cuda()
+                ones = torch.ones(grad_tensor.shape).cuda()
 
-        attribution = step_grad
+                grad_tensor = delta
+                mult_grads = grad_tensor * samples_delta
+                sign = torch.where(mult_grads >= 0., ones, zeros)
+                mult_grads = torch.pow(mult_grads, 2.) * sign
+
+                counts = torch.sum(sign, dim=1)
+                mult_grads = mult_grads.sum(1) / torch.where(counts == 0., ones[:, 0], counts)
+                attribution = mult_grads
+            else:
+                step_grad += delta
+                attribution = step_grad
 
         return attribution

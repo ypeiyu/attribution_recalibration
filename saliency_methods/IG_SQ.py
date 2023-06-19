@@ -1,7 +1,7 @@
 import torch
 import torch.utils.data
 
-from IntGrad import IntGrad
+from .IntGrad import IntGrad
 
 
 class IntGradSQ(IntGrad):

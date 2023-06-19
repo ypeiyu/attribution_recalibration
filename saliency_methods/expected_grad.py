@@ -1,7 +1,7 @@
 import torch
 import torch.utils.data
 
-from IntGrad import IntGrad
+from .IntGrad import IntGrad
 
 
 class ExpectedGradients(IntGrad):
@@ -38,6 +38,7 @@ class ExpectedGradients(IntGrad):
 
         # ================= expected gradients ==================
         reference_tensor = torch.zeros(shape).float().cuda()
+
         ref = self._get_ref_batch()
         for bth in range(shape[0]):
             for bg in range(self.bg_size):

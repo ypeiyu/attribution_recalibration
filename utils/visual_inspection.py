@@ -75,10 +75,10 @@ def visualize(image, saliency_map, filename, method_name):
     saliency_map = saliency_map.data.cpu().numpy()
 
     plt.figure(figsize=(6.0, 6.0))
-    plt.imsave(filename + '_' + method_name + '_aog.png', image.transpose(1, 2, 0))
+    plt.imsave(filename + '_' + method_name + '_aog.png', np.clip(image.transpose(1, 2, 0), 0, 1))
 
     s_m = diverging_norm(saliency_map.transpose(1, 2, 0))
-    plt.imsave(filename + '_' + method_name + '_div.png', s_m, cmap='coolwarm')
+    plt.imsave(filename + '_' + method_name + '_div.png', np.clip(s_m, 0, 1), cmap='coolwarm')
 
     s_m = abs_grayscale_norm(saliency_map.transpose(1, 2, 0))
-    plt.imsave(filename + '_' + method_name + '_red.png', s_m, cmap='Reds', format='png')
+    plt.imsave(filename + '_' + method_name + '_red.png', np.clip(s_m, 0, 1), cmap='Reds', format='png')

@@ -12,7 +12,7 @@ parser_default = {
     'attr_method': 'IG_Uniform',
     'model': 'resnet34',
     'dataset': 'ImageNet',
-    'metric': 'pixel_perturb',
+    'metric': 'visualize',
     'k': 5,
     'bg_size': 10,
 }

@@ -155,8 +155,7 @@ class IntegratedGradients(object):
         samples_delta = self._get_samples_inter_delta(samples_input, reference_tensor)
         grad_tensor = self._get_grads(samples_input, sparse_labels)
 
-        # ------------ original ------------
         mult_grads = samples_delta * grad_tensor if self.scale_by_inputs else grad_tensor
-        attribution = mult_grads.mean(1)
+        attribution = mult_grads.sum(1)
 
         return attribution

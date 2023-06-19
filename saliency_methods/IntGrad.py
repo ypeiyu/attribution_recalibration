@@ -37,7 +37,8 @@ def gather_nd(params, indices):
 
 
 class IntGrad(object):
-    def __init__(self, model, k, bg_size, random_alpha=True, scale_by_inputs=True, cal_type=['vanilla', 'valid_ref', 'valid_intp'][0]):
+    def __init__(self, model, k, bg_size, random_alpha=True, scale_by_inputs=True,
+                 cal_type=['vanilla', 'valid_ref', 'valid_intp'][0], contrastive=False, logit=True):
         self.model = model
         self.model.eval()
         self.k = k
@@ -45,6 +46,8 @@ class IntGrad(object):
         self.bg_size = bg_size
         self.random_alpha = random_alpha
         self.cal_type = cal_type
+        self.contrastive = contrastive
+        self.logit = logit
 
     def _get_samples_input(self, input_tensor, reference_tensor):
         '''
