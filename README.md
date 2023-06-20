@@ -7,10 +7,8 @@ This code implements attribution re-calibration algorithm from the following pap
 > [Re-calibrating Feature Attributions for Model Interpretation](https://scholar.google.com/citations?view_op=view_citation&hl=en&user=Xqmlj18AAAAJ&sortby=pubdate&citation_for_view=Xqmlj18AAAAJ:kzcrU_BdoSEC)
 
 
-## Abstract
-
-Trustworthy machine learning necessitates meticulous regulation of model reliance on non-robust features. In this paper, we proposed a framework to delineate such features by attributing model predictions to the input. Within this framework, the attributions of robust features exhibit certain consistency, while non-robust features are susceptible to attribution fluctuations. This suggests a strong correlation between model reliance on non-robust features and the smoothness of the marginal density of input samples. Hence, we propose to regularize the gradients of the marginal density w.r.t. the input features. We devise an efficient implementation of our regularization to address the potential numerical instability of the underlying optimization process. In contrast, we reveal that the baseline input gradient regularization smooths the implicit conditional or joint density, resulting in its limited robustness. Experiments validate the effectiveness of our technique through the mitigation of spurious correlation learned by the model and addressing feature leakage. We also demonstrate that our regularization enables the model to exhibit robustness against perturbations in pixel values, input gradients and density, enhancing its desirability for robust modeling.
-
+## Introduction
+Due to its desirable theoretical properties, path integration is a widely used scheme for feature attribution to interpret model predictions. However, these methods rely on taking absolute values of attributions to provide sensible explanations, which contradicts their premise and theoretical guarantee. We address this by computing an appropriate reference for the path integration scheme. Our scheme can be incorporated into the existing integral-based attribution methods. Extensive results show a marked performance boost for a range of integral-based attribution methods by enhancing them with our scheme.
 ![LPI](figs/attribution_recalibration.png)
 
 ## Prerequisites
@@ -21,7 +19,7 @@ Trustworthy machine learning necessitates meticulous regulation of model relianc
 - pytorch 1.12.0
 - torchvision 0.13.1
 
-## Re-Calibrating Attributions
+## Re-calibrating attributions
 
 ### Step 1: Preparing dataset.
 ```
@@ -33,10 +31,15 @@ dataset\DATASET
 pretrained_models\YOUR_MODEL
 ```
 
-### Step 3: Re-calibrating attributions.
+### Step 3: Re-calibrating attributions (IG_Uniform).
 
 ```
-python main.py -attr_method=IntGradSG -model resnet34 -dataset ImageNet -metric DiffID -k 5 -bg_size 10
+python main.py -attr_method=IG_Uniform -model resnet34 -dataset ImageNet -metric visualize -k 5 -bg_size 10
+```
+
+## Quantitatively Evaluations
+```
+python main.py -attr_method=IG_Uniform -model resnet34 -dataset ImageNet -metric DiffID -k 5 -bg_size 10
 ```
 
 ## Bibtex
