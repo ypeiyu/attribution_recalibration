@@ -73,9 +73,9 @@ class IntGrad(object):
             t_tensor = torch.FloatTensor(batch_size, k_*self.bg_size).uniform_(0, 1).to(DEFAULT_DEVICE)
         else:
             if k_ == 1:
-                t_tensor = torch.cat([torch.Tensor([1.0]) for i in range(batch_size*k_*self.bg_size)]).to(DEFAULT_DEVICE)
+                t_tensor = torch.cat([torch.Tensor([1.0]) for _ in range(batch_size*self.bg_size)]).to(DEFAULT_DEVICE)
             else:
-                t_tensor = torch.cat([torch.linspace(0, 1, k_) for i in range(batch_size*self.bg_size)]).to(DEFAULT_DEVICE)
+                t_tensor = torch.cat([torch.linspace(0, 1, k_) for _ in range(batch_size*self.bg_size)]).to(DEFAULT_DEVICE)
 
         shape = [batch_size, k_*self.bg_size] + [1] * num_input_dims
         interp_coef = t_tensor.view(*shape)
