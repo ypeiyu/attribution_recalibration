@@ -39,7 +39,7 @@ def gather_nd(params, indices):
 
 
 class IntGradSG(object):
-    def __init__(self, model, k, bg_size, random_alpha=True, est_method='vanilla', exp_obj='logit'):
+    def __init__(self, model, k, bg_size, random_alpha=False, est_method='vanilla', exp_obj='logit'):
         self.model = model
         self.model.eval()
         self.k = k
@@ -89,15 +89,14 @@ class IntGradSG(object):
         return samples_input
 
     def _get_samples_delta(self, input_tensor, reference_tensor):
-        input_expand_mult = input_tensor.unsqueeze(1)
-        sd = input_expand_mult - reference_tensor
+        input_tensor = input_tensor.unsqueeze(1)
+        sd = input_tensor - reference_tensor
         return sd
 
     def _get_grads(self, samples_input, sparse_labels=None):
         samples_input.requires_grad = True
         shape = list(samples_input.shape)
         shape[1] = self.bg_size
-
         if self.est_method == 'valid_ip':
             shape.insert(2, self.k)
 
@@ -179,11 +178,10 @@ class IntGradSG(object):
         input_tensor, samples_input, reference_tensor = self.chew_input(input_tensor)
 
         if self.est_method == 'valid_ip':
-            samples_delta = self._get_samples_delta(input_tensor, samples_input)  # samples_input, reference_tensor
-            grad_ori_tensor = self._get_grads(samples_input, sparse_labels)
-            grad_ori_tensor = grad_ori_tensor.squeeze(2)
-            grad_ori_tensor = grad_ori_tensor.reshape(samples_delta.shape)
-            mult_grads = grad_ori_tensor * samples_delta
+            samples_delta = self._get_samples_delta(input_tensor, samples_input)  # samples_input, multi_ref_tensor input_tensor, samples_input
+            grad_tensor = self._get_grads(samples_input, sparse_labels)
+            grad_tensor = grad_tensor.reshape(samples_delta.shape)
+            mult_grads = grad_tensor * samples_delta
             grad_sign = torch.where(mult_grads >= 0., 1., 0.)
             mult_grads = mult_grads * grad_sign
 
@@ -193,14 +191,12 @@ class IntGradSG(object):
         elif self.est_method == 'valid_ref':
             samples_delta = self._get_samples_delta(input_tensor, reference_tensor)
             grad_tensor = self._get_grads(samples_input, sparse_labels)
-            zeros = torch.zeros(grad_tensor.shape).cuda()
-            ones = torch.ones(grad_tensor.shape).cuda()
             mult_grads = grad_tensor * samples_delta
-            grad_sign = torch.where(mult_grads >= 0., ones, zeros)
+            grad_sign = torch.where(mult_grads >= 0., 1., 0.)
             mult_grads = mult_grads * grad_sign
 
             counts = torch.sum(grad_sign, dim=1)
-            mult_grads = mult_grads.sum(1) / torch.where(counts == 0., ones[:, 0], counts)
+            mult_grads = mult_grads.sum(1) / torch.where(counts == 0., torch.ones(counts.shape).cuda(), counts)
             attribution = mult_grads
         else:
             samples_delta = self._get_samples_delta(input_tensor, reference_tensor)
