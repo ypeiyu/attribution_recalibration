@@ -6,7 +6,7 @@ from .IG_SG import IntGradSG
 
 class ExpectedGradients(IntGradSG):
     def __init__(self, model, k, bg_size, bg_dataset, batch_size, random_alpha=True, est_method='vanilla', exp_obj='logit'):
-        super(ExpectedGradients, self).__init__(model, k, bg_size, random_alpha, est_method)
+        super(ExpectedGradients, self).__init__(model, k, bg_size, random_alpha, est_method, exp_obj)
         self.bg_size = bg_size
         self.random_alpha = random_alpha
         self.ref_sampler = torch.utils.data.DataLoader(
@@ -35,18 +35,14 @@ class ExpectedGradients(IntGradSG):
             inter (optional, default=None)
         """
         shape = list(input_tensor.shape)
-        shape.insert(1, self.k*self.bg_size)
-
-        # ================= expected gradients ==================
-        reference_tensor = torch.zeros(shape).float().cuda()
+        shape.insert(1, self.bg_size)
 
         ref = self._get_ref_batch()
-        for bth in range(shape[0]):
-            for bg in range(self.bg_size):
-                ref_ = ref[bth * self.bg_size + bg]
-                reference_tensor[bth, bg*self.k:(bg+1)*self.k, :] = ref_
+        reference_tensor = ref.view(*shape).cuda()
+
         if ref.shape[0] != input_tensor.shape[0]*self.k:
             reference_tensor = reference_tensor[:input_tensor.shape[0]*self.k]
+        multi_ref_tensor = reference_tensor.repeat(1, self.k, 1, 1, 1)
 
-        samples_input = self._get_samples_input(input_tensor, reference_tensor)
+        samples_input = self._get_samples_input(input_tensor, multi_ref_tensor)
         return input_tensor, samples_input, reference_tensor

@@ -89,14 +89,6 @@ class IntGradSG(object):
         return samples_input
 
     def _get_samples_delta(self, input_tensor, reference_tensor):
-
-        # if input_tensor.shape != reference_tensor.shape:
-        #     input_expand_mult = input_tensor.unsqueeze(1)
-        #     sd = input_expand_mult - reference_tensor[:, ::self.k, :]
-        # else:
-        #     sd = input_tensor - reference_tensor
-        # return sd
-
         input_expand_mult = input_tensor.unsqueeze(1)
         sd = input_expand_mult - reference_tensor
         return sd
@@ -204,10 +196,10 @@ class IntGradSG(object):
             zeros = torch.zeros(grad_tensor.shape).cuda()
             ones = torch.ones(grad_tensor.shape).cuda()
             mult_grads = grad_tensor * samples_delta
-            sign = torch.where(mult_grads >= 0., ones, zeros)
-            mult_grads = torch.pow(mult_grads, 2.) * sign
+            grad_sign = torch.where(mult_grads >= 0., ones, zeros)
+            mult_grads = mult_grads * grad_sign
 
-            counts = torch.sum(sign, dim=1)
+            counts = torch.sum(grad_sign, dim=1)
             mult_grads = mult_grads.sum(1) / torch.where(counts == 0., ones[:, 0], counts)
             attribution = mult_grads
         else:

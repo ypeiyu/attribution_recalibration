@@ -2,37 +2,41 @@ import torch
 import torch.utils.data
 
 from .IG_SG import IntGradSG
-from utils.preprocess import preprocess, undo_preprocess
 
 
 class IntGradSQ(IntGradSG):
 
-    def chew_input(self, input_tensor):
-        """
-        Calculate IG_SQ values for the sample ``input_tensor``.
+    def shap_values(self, input_tensor, sparse_labels=None):
+        input_tensor, samples_input, reference_tensor = self.chew_input(input_tensor)
 
-        Args:
-            model (torch.nn.Module): Pytorch neural network model for which the
-                output should be explained.
-            input_tensor (torch.Tensor): Pytorch tensor representing the input
-                to be explained.
-            sparse_labels (optional, default=None):
-            inter (optional, default=None)
-        """
-        shape = list(input_tensor.shape)
-        shape.insert(1, self.bg_size)
+        if self.est_method == 'valid_ip':
+            samples_delta = self._get_samples_delta(input_tensor, samples_input)  # samples_input, reference_tensor
+            grad_ori_tensor = self._get_grads(samples_input, sparse_labels)
+            grad_ori_tensor = grad_ori_tensor.squeeze(2)
+            grad_ori_tensor = grad_ori_tensor.reshape(samples_delta.shape)
+            mult_grads = grad_ori_tensor * samples_delta
+            grad_sign = torch.where(mult_grads >= 0., 1., 0.)
+            mult_grads = torch.pow(mult_grads, 2.) * grad_sign
 
-        input_tensor = undo_preprocess(input_tensor)
-        std_factor = 0.15
-        std_dev = std_factor * (input_tensor.max().item() - input_tensor.min().item())
-        ref_lst = [torch.normal(mean=torch.zeros_like(input_tensor), std=std_dev) for _ in range(self.bg_size)]
-        reference_tensor = torch.stack(ref_lst, dim=0).cuda()
-        reference_tensor += input_tensor.unsqueeze(1)
-        reference_tensor = torch.clamp(reference_tensor, min=0., max=1.)
-        reference_tensor = preprocess(reference_tensor.reshape(-1, shape[-3], shape[-2], shape[-1]))
-        input_tensor = preprocess(input_tensor)
-        reference_tensor = reference_tensor.view(*shape)
-        multi_ref_tensor = reference_tensor.repeat(1, self.k, 1, 1, 1)
+            counts = torch.sum(grad_sign, dim=1)
+            mult_grads = mult_grads.sum(1) / torch.where(counts == 0., torch.ones(counts.shape).cuda(), counts)
+            attribution = mult_grads
+        elif self.est_method == 'valid_ref':
+            samples_delta = self._get_samples_delta(input_tensor, reference_tensor)
+            grad_tensor = self._get_grads(samples_input, sparse_labels)
+            zeros = torch.zeros(grad_tensor.shape).cuda()
+            ones = torch.ones(grad_tensor.shape).cuda()
+            mult_grads = grad_tensor * samples_delta
+            grad_sign = torch.where(mult_grads >= 0., ones, zeros)
+            mult_grads = torch.pow(mult_grads, 2.) * grad_sign
 
-        samples_input = self._get_samples_input(input_tensor, multi_ref_tensor)
-        return input_tensor, samples_input, reference_tensor
+            counts = torch.sum(grad_sign, dim=1)
+            mult_grads = mult_grads.sum(1) / torch.where(counts == 0., ones[:, 0], counts)
+            attribution = mult_grads
+        else:
+            samples_delta = self._get_samples_delta(input_tensor, reference_tensor)
+            grad_tensor = self._get_grads(samples_input, sparse_labels)
+            mult_grads = samples_delta * grad_tensor
+            attribution = mult_grads.mean(1)
+
+        return attribution
