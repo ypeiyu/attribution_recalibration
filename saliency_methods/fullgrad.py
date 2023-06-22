@@ -19,8 +19,9 @@ class FullGrad():
     Compute FullGrad saliency map and full gradient decomposition
     """
 
-    def __init__(self, model, im_size=(3, 224, 224)):
+    def __init__(self, model, exp_obj='logit', im_size=(3, 224, 224)):
         self.model = model
+        self.exp_obj = exp_obj
         self.im_size = (1,) + im_size
         self.model_ext = FullGradExtractor(model, im_size)
         self.biases = self.model_ext.getBiases()
@@ -63,14 +64,30 @@ class FullGrad():
 
         self.model.eval()
         image = image.requires_grad_()
-        out = self.model(image)
+        output = self.model(image)
 
-        if target_class is None:
-            target_class = out.data.max(1, keepdim=True)[1]
+        # ---------------------------------------------
+        if self.exp_obj == 'logit':
+            batch_output = output
+        elif self.exp_obj == 'prob':
+            batch_output = torch.log_softmax(output, 1)
+        elif self.exp_obj == 'contrast':
+            neg_cls_indices = torch.arange(output.size(1))[
+                ~torch.eq(torch.unsqueeze(output, dim=1), target_class)]
+            neg_cls_output = torch.index_select(output, dim=1, index=neg_cls_indices)
+            neg_weight = F.softmax(neg_cls_output, dim=1)
+            weighted_neg_output = (neg_weight * neg_cls_output).sum(dim=1)
+            pos_cls_indices = torch.arange(output.size(1))[torch.eq(torch.unsqueeze(output, dim=1), target_class)]
+            neg_cls_output = torch.index_select(output, dim=1, index=pos_cls_indices)
+            output = neg_cls_output - weighted_neg_output
+            batch_output = output
+        out = batch_output
+        output_scalar = out
 
-        # Select the output unit corresponding to the target class
-        # -1 compensates for negation in nll_loss function
-        output_scalar = -1. * F.nll_loss(out, target_class.flatten(), reduction='sum')  # -1 * extract and negative
+        # ---------------------------------------------
+        # if target_class is None:
+        #     target_class = out.data.max(1, keepdim=True)[1]
+        # output_scalar = -1. * F.nll_loss(out, target_class.flatten(), reduction='sum')  # -1 * extract and negative
 
         input_gradient, feature_gradients = self.model_ext.getFeatureGrads(image, output_scalar)
 

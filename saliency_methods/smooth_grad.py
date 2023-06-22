@@ -24,9 +24,10 @@ class SmoothGrad():
     Compute smoothgrad 
     """
 
-    def __init__(self, model, num_samples=100, std_spread=0.15):
+    def __init__(self, model, bg_size=100, exp_obj='logit', std_spread=0.15):
         self.model = model
-        self.num_samples = num_samples
+        self.num_samples = bg_size
+        self.exp_obj = exp_obj
         self.std_spread = std_spread
 
     def _getGradients(self, image, target_class=None):
@@ -35,13 +36,31 @@ class SmoothGrad():
         """
 
         image = image.requires_grad_()
-        out = self.model(image)
+        output = self.model(image)
 
-        if target_class is None:
-            target_class = out.data.max(1, keepdim=True)[1]
-            target_class = target_class.flatten()
+        # ---------------------------------------------
+        if self.exp_obj == 'logit':
+            batch_output = output
+        elif self.exp_obj == 'prob':
+            batch_output = torch.log_softmax(output, 1)
+        elif self.exp_obj == 'contrast':
+            neg_cls_indices = torch.arange(output.size(1))[
+                ~torch.eq(torch.unsqueeze(output, dim=1), target_class)]
+            neg_cls_output = torch.index_select(output, dim=1, index=neg_cls_indices)
+            neg_weight = F.softmax(neg_cls_output, dim=1)
+            weighted_neg_output = (neg_weight * neg_cls_output).sum(dim=1)
+            pos_cls_indices = torch.arange(output.size(1))[torch.eq(torch.unsqueeze(output, dim=1), target_class)]
+            neg_cls_output = torch.index_select(output, dim=1, index=pos_cls_indices)
+            output = neg_cls_output - weighted_neg_output
+            batch_output = output
+        out = batch_output
+        loss = out
 
-        loss = -1. * F.nll_loss(out, target_class, reduction='sum')
+        # ---------------------------------------------
+        # if target_class is None:
+        #     target_class = out.data.max(1, keepdim=True)[1]
+        #     target_class = target_class.flatten()
+        # loss = -1. * F.nll_loss(out, target_class, reduction='sum')
 
         self.model.zero_grad()
         # Gradients w.r.t. input and features

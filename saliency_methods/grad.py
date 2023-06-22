@@ -41,7 +41,7 @@ class Gradients(object):
     def __init__(self, model, exp_obj='logit'):
         self.model = model
         self.model.eval()
-        self.exp_obj=exp_obj
+        self.exp_obj = exp_obj
 
     def shap_values(self, input_tensor, sparse_labels=None):
         """
@@ -77,7 +77,7 @@ class Gradients(object):
 
         # should check that users pass in sparse labels
         # Only look at the user-specified label
-        if sparse_labels is not None and batch_output.size(1) > 1:
+        if sparse_labels is not None and batch_output.size(1) > 1 and self.exp_obj != 'contrast':
             sample_indices = torch.arange(0, batch_output.size(0)).to(DEFAULT_DEVICE)
             indices_tensor = torch.cat([
                 sample_indices.unsqueeze(1),

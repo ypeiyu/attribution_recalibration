@@ -39,7 +39,7 @@ def gather_nd(params, indices):
 
 
 class IntegratedGradients(object):
-    def __init__(self, model, k=10,  exp_obj='logit'):
+    def __init__(self, model, k=10, exp_obj='logit'):
         self.model = model
         self.model.eval()
         self.k = k
