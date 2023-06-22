@@ -17,6 +17,6 @@ parser_default = {
     'metric': 'DiffID',
     'k': 5,
     'bg_size': 20,
-    'est_method': 'valid_ip',
+    'est_method': 'valid_ref',
     'exp_obj': 'logit',
 }
