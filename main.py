@@ -29,83 +29,83 @@ from utils.settings import parser_choices, parser_default
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-gpuid', nargs=1, type=str, default='0')
-parser.add_argument('-attr_method', type=str, required=False,
+parser.add_argument('-attr_method', type=str,
                     choices=parser_choices['attr_method'],
                     default=parser_default['attr_method'])
-parser.add_argument('-model', type=str, required=False,
+parser.add_argument('-model', type=str,
                     choices=parser_choices['model'],
                     default=parser_default['model'])
-parser.add_argument('-dataset', type=str, required=False,
+parser.add_argument('-dataset', type=str,
                     choices=parser_choices['dataset'],
                     default=parser_default['dataset'])
-parser.add_argument('-metric', type=str, required=False,
+parser.add_argument('-metric', type=str,
                     choices=parser_choices['metric'],
                     default=parser_default['metric'])
-parser.add_argument('-k', type=int, required=False,
+parser.add_argument('-k', type=int,
                     default=parser_default['k'])
-parser.add_argument('-bg_size', type=int, required=False,
+parser.add_argument('-bg_size', type=int,
                     default=parser_default['bg_size'])
+parser.add_argument('-est_method', type=str,
+                    choices=parser_choices['est_method'],
+                    default=parser_default['est_method'])
+parser.add_argument('-exp_obj', type=str,
+                    choices=parser_choices['est_method'],
+                    default=parser_default['exp_obj'])
 args = parser.parse_args()
 
 
 def load_explainer(model, **kwargs):
     method_name = kwargs['method_name']
     if method_name == 'Random':
-        print('================= Random Baseline ==================')
+        # ================= Random Baseline ==================
         random = RandomBaseline()
         return random
     elif method_name == 'InputGrad':
-        print('================= Input Gradients ==================')
-        input_grad = Gradients(model)
+        # ================= Input Gradients ==================
+        input_grad = Gradients(model, exp_obj=kwargs['exp_obj'])
         return input_grad
+    elif method_name == 'IntGrad':
+        # ============================ Integrated Gradients ============================
+        integrated_grad = IntegratedGradients(model, k=kwargs['k'], exp_obj=kwargs['exp_obj'])
+        return integrated_grad
+    elif method_name == 'ExpGrad':
+        expected_grad = ExpectedGradients(model, k=kwargs['k'], bg_size=kwargs['bg_size'], bg_dataset=kwargs['bg_dataset'],
+                                          batch_size=kwargs['bg_batch_size'], random_alpha=kwargs['random_alpha'],
+                                          est_method=kwargs['est_method'], exp_obj=kwargs['exp_obj'])
+        return expected_grad
+    elif method_name == 'IG_Uniform':
+        # ============================ IG_Uniform ============================
+        int_grad_uni = IntGradUniform(model, k=kwargs['k'], bg_size=kwargs['bg_size'], random_alpha=kwargs['random_alpha'],
+                                      est_method=kwargs['est_method'], exp_obj=kwargs['exp_obj'])
+        return int_grad_uni
+    elif method_name == 'IG_SG':
+        # ============================ IG_SG ============================
+        int_grad_sg = IntGradSG(model, k=kwargs['k'], bg_size=kwargs['bg_size'], random_alpha=kwargs['random_alpha'],
+                                est_method=kwargs['est_method'], exp_obj=kwargs['exp_obj'])
+        return int_grad_sg
+    elif method_name == 'IG_SQ':
+        # ============================ IG_SQ ============================
+        int_grad_sq = IntGradSQ(model, k=kwargs['k'], bg_size=kwargs['bg_size'], random_alpha=kwargs['random_alpha'],
+                                est_method=kwargs['est_method'], exp_obj=kwargs['exp_obj'])
+        return int_grad_sq
+
+
     elif method_name == 'FullGrad':
-        print('================= Full Gradients ==================')
+        # ================= Full Gradients ==================
         full_grad = FullGrad(model)
         return full_grad
     elif method_name == 'SmoothGrad':
-        print('================= Smooth Gradients ==================')
+        # ================= Smooth Gradients ==================
         num_samples = kwargs['num_samples']
         smooth_grad = SmoothGrad(model, num_samples=num_samples)
         return smooth_grad
     elif method_name == 'AGI':
-        print('================= AGI ==================')
+        # ================= AGI ==================
         k = kwargs['k']
         top_k = kwargs['top_k']
         cls_num = kwargs['cls_num']
         agi = AGI(model, k=k, top_k=top_k, cls_num=cls_num)
         return agi
-    elif method_name == 'IntGrad':
-        print('============================ Integrated Gradients ============================')
-        k = kwargs['k']
-        integrated_grad = IntegratedGradients(model, k=k)
-        return integrated_grad
-    elif method_name == 'ExpGrad':
-        print('============================ Expected Gradients ============================')
-        k = kwargs['k']
-        bg_size = kwargs['bg_size']
-        train_dataset = kwargs['train_dataset']
-        test_batch_size = kwargs['test_batch_size']
-        random_alpha = kwargs['random_alpha']
-        expected_grad = ExpectedGradients(model, k=k, bg_dataset=train_dataset, bg_size=bg_size, batch_size=test_batch_size, random_alpha=random_alpha)
-        return expected_grad
-    elif method_name == 'IG_Uniform':
-        print('============================ IG_Uniform ============================')
-        k = kwargs['k']
-        bg_size = kwargs['bg_size']
-        int_grad_uni = IntGradUniform(model, k=k, bg_size=bg_size)
-        return int_grad_uni
-    elif method_name == 'IG_SG':
-        print('============================ IG_SG ============================')
-        k = kwargs['k']
-        bg_size = kwargs['bg_size']
-        int_grad_sg = IntGradSG(model, k=k, bg_size=bg_size)
-        return int_grad_sg
-    elif method_name == 'IG_SQ':
-        print('============================ IG_SQ ============================')
-        k = kwargs['k']
-        bg_size = kwargs['bg_size']
-        int_grad_sq = IntGradSQ(model, k=k, bg_size=bg_size)
-        return int_grad_sq
 
     else:
         raise NotImplementedError('%s is not implemented.' % method_name)
@@ -197,61 +197,39 @@ def load_dataset(dataset_name, test_batch_size):
         return cifar100_tr_dataset, cifar100_te_loader
 
 
-def evaluate(method_name, model_name, dataset_name, metric, k=None, bg_size=None):
-    model_name = model_name  # vgg16 resnet34
-    method_name = method_name
-
+def evaluate(method_name, model_name, dataset_name, metric, k=None, bg_size=None, est_method='vanilla', exp_obj='logit'):
     if model_name == 'vgg16':
         model = models.vgg16(pretrained=True)
     elif model_name == 'MLP':
-        model = Model(i_c=1, n_c=10)  # load model
+        model = Model(i_c=1, n_c=10)
+        model_pth = 'saved_models/MLP/checkpoint_MNIST_MLP_Permuted_best.pth'
+        pretrained_model = torch.load(model_pth)
+        model.load_state_dict(pretrained_model, strict=True)
     elif model_name == 'resnet34':
         model = models.resnet34(pretrained=True)
 
-
-    if model_name in ['vgg16', 'resnet34', 'MLP']:
-        model = model.to('cuda')
-        model = torch.nn.DataParallel(model)
-        model.eval()
-    if model_name == 'MLP':
-        # model_pth = 'saved_models/MLP/checkpoint_MNIST_MLP_best.pth'
-        model_pth = 'saved_models/MLP/checkpoint_MNIST_MLP_Permuted_best.pth'
-
-        pretrained_model = torch.load(model_pth)
-        model.load_state_dict(pretrained_model, strict=True)
-        model.eval()
+    model = model.to('cuda')
+    model = torch.nn.DataParallel(model)
+    model.eval()
 
     # =================== load train dataset & test loader ========================
-    test_batch_size = {'ImageNet':
-                           {'resnet34': {'Random': 150, 'InputGrad': 70, 'FullGrad': 60, 'AGI': 80, 'ExpGrad': 40, 'IG_Uniform': 20,
-                                       'IntGrad': 50, 'SmoothGrad': 200, 'LPI': 40},
-                            'vgg16': {'Random': 160, 'InputGrad': 60, 'FullGrad': 60, 'AGI': 40, 'ExpGrad': 40, 'IG_Uniform': 10,
-                                       'IntGrad': 40, 'SmoothGrad': 120, 'LPI': 1},
-                            'inception_v3': {'InputGrad': 20, 'ExpGrad': 60, 'ExpGrad_new': 60, 'IntGrad': 60, 'AGI': 20},
-                            'inception_v3_vis': {'InputGrad': 20, 'ExpGrad': 20, 'ExpGrad_new': 20, 'IntGrad': 20, 'AGI': 20}
-                            },
-                       'MNIST':
-                           {'MLP': {'Random': 150, 'InputGrad': 150, 'FullGrad': 60, 'AGI': 80, 'ExpGrad': 120, 'IG_Uniform': 120,
-                                    'IntGrad': 120, 'SmoothGrad': 400, 'LPI': 120}},
-                       'CIFAR-10':
-                           {'preactresnet': {'Random': 256, 'InputGrad': 256, 'FullGrad': 256, 'AGI': 512, 'ExpGrad': 64,
-                                             'IG_Uniform': 512, 'IntGrad': 256, 'SmoothGrad': 256, 'LPI': 256}},
-                       'CIFAR-100':
-                           {'preactresnet': {'Random': 256, 'InputGrad': 256, 'FullGrad': 256, 'AGI': 512, 'ExpGrad': 64,
-                                             'IG_Uniform': 512, 'IntGrad': 256, 'SmoothGrad': 256, 'LPI': 256}}
-                       }
-    dataset_n = dataset_name
-    if 'ImageNet' in dataset_name:
-        dataset_n = 'ImageNet'
-    test_bth = test_batch_size[dataset_n][model_name][method_name]
+    test_bth = 32
     train_dataset, test_loader = load_dataset(dataset_name=dataset_name, test_batch_size=test_bth)
 
     # =================== load explainer ========================
     explainer_args = {
-        'ExpGrad': {'method_name': method_name, 'k': k, 'bg_size': bg_size, 'train_dataset': train_dataset,
-                    'test_batch_size': test_bth, 'random_alpha': False},
-        'IG_Uniform': {'method_name': method_name, 'k': k, 'bg_size': bg_size, 'test_batch_size': test_bth},
+        'Random': {},
+        'InputGrad': {'method_name': method_name, 'exp_obj': exp_obj},
+        'IntGrad': {'method_name': method_name, 'k': k, 'exp_obj': exp_obj},
+        'ExpGrad': {'method_name': method_name, 'k': k, 'bg_size': bg_size, 'bg_dataset': train_dataset,
+                    'bg_batch_size': test_bth, 'random_alpha': True, 'est_method': est_method, 'exp_obj': exp_obj},
 
+        'IG_Uniform': {'method_name': method_name, 'k': k, 'bg_size': bg_size, 'random_alpha': False,
+                       'est_method': est_method, 'exp_obj': exp_obj},
+        'IG_SG': {'method_name': method_name, 'k': k, 'bg_size': bg_size, 'random_alpha': False,
+                  'est_method': est_method, 'exp_obj': exp_obj},
+        'IG_SQ': {'method_name': method_name, 'k': k, 'bg_size': bg_size, 'random_alpha': False,
+                  'est_method': est_method, 'exp_obj': exp_obj},
     }
 
     if metric == 'sanity_check':
@@ -315,7 +293,7 @@ def evaluate(method_name, model_name, dataset_name, metric, k=None, bg_size=None
                 print(saliency_map_set.shape)
                 np.save(file_name, saliency_map_set)
 
-    if metric == 'pixel_perturb':
+    if metric == 'DiffID':
         explainer = load_explainer(model=model, **explainer_args[method_name])
         evaluator = Evaluator(model, explainer=explainer, dataloader=test_loader)
 
@@ -327,9 +305,9 @@ def evaluate(method_name, model_name, dataset_name, metric, k=None, bg_size=None
                 centers = np.load(
                     '/home/peiyu/PROJECT/grad-saliency-master/dataset_distribution/' + model_name +
                     '/kmeans_' + model_name + '_n' + str(cent_num) + '_centers.npy')
-            evaluator.DiffID(baseline_name='mean', q_ratio_lst=[step * 0.1 for step in range(1, 10)], centers=centers)
+            evaluator.DiffID(ratio_lst=[step * 0.1 for step in range(1, 10)], centers=centers)
         else:
-            evaluator.DiffID(baseline_name='mean', q_ratio_lst=[step * 0.1 for step in range(1, 10)])
+            evaluator.DiffID(ratio_lst=[step * 0.1 for step in range(1, 10)])
 
     if metric == 'visualize':
         num_vis_samples = 500
@@ -341,4 +319,4 @@ def evaluate(method_name, model_name, dataset_name, metric, k=None, bg_size=None
 
 if __name__ == '__main__':
     evaluate(method_name=args.attr_method, model_name=args.model, dataset_name=args.dataset, metric=args.metric,
-             k=args.k, bg_size=args.bg_size)
+             k=args.k, bg_size=args.bg_size, est_method=args.est_method, exp_obj=args.exp_obj)
