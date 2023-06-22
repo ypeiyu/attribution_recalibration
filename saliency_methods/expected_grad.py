@@ -1,12 +1,13 @@
 import torch
 import torch.utils.data
 
-from .IntGrad import IntGrad
+from .IG_SG import IntGradSG
 
 
-class ExpectedGradients(IntGrad):
-    def __init__(self, model, k, bg_dataset, bg_size, batch_size, random_alpha=True, scale_by_inputs=True, cal_type=['nano', 'valid_ref', 'valid_intp'][0]):
-        super(ExpectedGradients, self).__init__(model, k, bg_size, random_alpha, scale_by_inputs, cal_type)
+class ExpectedGradients(IntGradSG):
+    def __init__(self, model, k, bg_size, bg_dataset, batch_size, random_alpha=True, est_method='vanilla',
+                 exp_obj='logit'):
+        super(ExpectedGradients, self).__init__(model, k, bg_size, random_alpha, est_method)
         self.bg_size = bg_size
         self.random_alpha = random_alpha
         self.ref_sampler = torch.utils.data.DataLoader(
@@ -16,7 +17,8 @@ class ExpectedGradients(IntGrad):
                 pin_memory=False,
                 drop_last=False)
 
-        self.cal_type = cal_type
+        self.est_method = est_method
+        self.exp_obj = exp_obj
 
     def _get_ref_batch(self):
         return next(iter(self.ref_sampler))[0].float()

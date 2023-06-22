@@ -1,10 +1,11 @@
 import torch
 import torch.utils.data
 
-from .IntGrad import IntGrad
+from .IG_SG import IntGradSG
+from utils.preprocess import preprocess, undo_preprocess
 
 
-class IntGradSQ(IntGrad):
+class IntGradSQ(IntGradSG):
 
     def chew_input(self, input_tensor):
         """
@@ -19,20 +20,19 @@ class IntGradSQ(IntGrad):
             inter (optional, default=None)
         """
         shape = list(input_tensor.shape)
-        shape.insert(1, self.k * self.bg_size)
+        shape.insert(1, self.bg_size)
 
-        from utils.preprocess import preprocess, undo_preprocess
         input_tensor = undo_preprocess(input_tensor)
         std_factor = 0.15
         std_dev = std_factor * (input_tensor.max().item() - input_tensor.min().item())
-        ref_lst = [torch.normal(mean=torch.zeros_like(input_tensor), std=std_dev).cuda() for _ in
-                   range(self.k * self.bg_size)]
-        reference_tensor = torch.cat(ref_lst).view(*shape)
+        ref_lst = [torch.normal(mean=torch.zeros_like(input_tensor), std=std_dev) for _ in range(self.bg_size)]
+        reference_tensor = torch.stack(ref_lst, dim=0).cuda()
         reference_tensor += input_tensor.unsqueeze(1)
         reference_tensor = torch.clamp(reference_tensor, min=0., max=1.)
         reference_tensor = preprocess(reference_tensor.reshape(-1, shape[-3], shape[-2], shape[-1]))
         input_tensor = preprocess(input_tensor)
         reference_tensor = reference_tensor.view(*shape)
+        multi_ref_tensor = reference_tensor.repeat(1, self.k, 1, 1, 1)
 
-        samples_input = self._get_samples_input(input_tensor, reference_tensor)
+        samples_input = self._get_samples_input(input_tensor, multi_ref_tensor)
         return input_tensor, samples_input, reference_tensor

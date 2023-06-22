@@ -1,9 +1,9 @@
 import torch
 import torch.utils.data
-from .IntGrad import IntGrad
+from .IG_SG import IntGradSG
 
 
-class IntGradUniform(IntGrad):
+class IntGradUniform(IntGradSG):
 
     def chew_input(self, input_tensor):
         """

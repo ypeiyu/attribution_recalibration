@@ -39,15 +39,12 @@ def gather_nd(params, indices):
 
 
 class IntegratedGradients(object):
-    def __init__(self, model, k=1, scale_by_inputs=True):
+    def __init__(self, model, k=1, contrastive=False, logit=True):
         self.model = model
         self.model.eval()
         self.k = k
-        self.scale_by_inputs = scale_by_inputs
-
-        self.f_std = 0.
-        self.b_std = 0.
-        self.img_num = 0
+        self.contrastive = contrastive
+        self.logit = logit
 
     def _get_samples_input(self, input_tensor, reference_tensor):
         '''
@@ -103,14 +100,10 @@ class IntegratedGradients(object):
 
         for i in range(self.k):
             particular_slice = samples_input[:, i]
-            # output, _, proto_output, _ = model(particular_slice)  # [5, 200] [5, 2000]
-
-            output = self.model(particular_slice)  # [5, 200] [5, 2000]
-            # origin
-            # output = - torch.softmax(output, 1)
-            # output = - torch.log_softmax(output, 1)
-
+            output = self.model(particular_slice)
             batch_output = output
+            if not self.logit:
+                batch_output = torch.log_softmax(output, 1)
 
             # should check that users pass in sparse labels
             # Only look at the user-specified label
@@ -155,7 +148,7 @@ class IntegratedGradients(object):
         samples_delta = self._get_samples_inter_delta(samples_input, reference_tensor)
         grad_tensor = self._get_grads(samples_input, sparse_labels)
 
-        mult_grads = samples_delta * grad_tensor if self.scale_by_inputs else grad_tensor
+        mult_grads = samples_delta * grad_tensor
         attribution = mult_grads.sum(1)
 
         return attribution

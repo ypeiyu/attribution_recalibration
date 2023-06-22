@@ -2,6 +2,7 @@ import functools
 import operator
 import torch
 from torch.autograd import grad
+import torch.nn.functional as F
 from utils.preprocess import preprocess, undo_preprocess
 
 DEFAULT_DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -38,17 +39,14 @@ def gather_nd(params, indices):
 
 
 class IntGradSG(object):
-    def __init__(self, model, k, bg_size, random_alpha=True, scale_by_inputs=True,
-                 cal_type=['vanilla', 'valid_ref', 'valid_intp'][0], contrastive=False, logit=True):
+    def __init__(self, model, k, bg_size, random_alpha=True, est_method='vanilla', exp_obj='logit'):
         self.model = model
         self.model.eval()
         self.k = k
-        self.scale_by_inputs = scale_by_inputs
         self.bg_size = bg_size
         self.random_alpha = random_alpha
-        self.cal_type = cal_type
-        self.contrastive = contrastive
-        self.logit = logit
+        self.est_method = est_method
+        self.exp_obj = exp_obj
 
     def _get_samples_input(self, input_tensor, reference_tensor):
         '''
@@ -91,11 +89,16 @@ class IntGradSG(object):
         return samples_input
 
     def _get_samples_delta(self, input_tensor, reference_tensor):
-        if input_tensor.shape != reference_tensor.shape:
-            input_expand_mult = input_tensor.unsqueeze(1)
-            sd = input_expand_mult - reference_tensor[:, ::self.k, :]
-        else:
-            sd = input_tensor - reference_tensor
+
+        # if input_tensor.shape != reference_tensor.shape:
+        #     input_expand_mult = input_tensor.unsqueeze(1)
+        #     sd = input_expand_mult - reference_tensor[:, ::self.k, :]
+        # else:
+        #     sd = input_tensor - reference_tensor
+        # return sd
+
+        input_expand_mult = input_tensor.unsqueeze(1)
+        sd = input_expand_mult - reference_tensor
         return sd
 
     def _get_grads(self, samples_input, sparse_labels=None):
@@ -103,7 +106,7 @@ class IntGradSG(object):
         shape = list(samples_input.shape)
         shape[1] = self.bg_size
 
-        if self.cal_type == 'valid_intp':
+        if self.est_method == 'valid_ip':
             shape.insert(2, self.k)
 
         grad_tensor = torch.zeros(shape).float().to(DEFAULT_DEVICE)
@@ -112,7 +115,21 @@ class IntGradSG(object):
             for k_id in range(self.k):
                 particular_slice = samples_input[:, b_id*self.k+k_id]
                 output = self.model(particular_slice)
-                batch_output = output
+
+                if self.exp_obj == 'logit':
+                    batch_output = output
+                elif self.exp_obj == 'prob':
+                    batch_output = output
+                elif self.exp_obj == 'contrast':
+                    neg_cls_indices = torch.arange(output.size(1))[
+                        ~torch.eq(torch.unsqueeze(output, dim=1), sparse_labels)]
+                    neg_cls_output = torch.index_select(output, dim=1, index=neg_cls_indices)
+                    neg_weight = F.softmax(neg_cls_output, dim=1)
+                    weighted_neg_output = (neg_weight * neg_cls_output).sum(dim=1)
+                    pos_cls_indices = torch.arange(output.size(1))[torch.eq(torch.unsqueeze(output, dim=1), sparse_labels)]
+                    neg_cls_output = torch.index_select(output, dim=1, index=pos_cls_indices)
+                    output = neg_cls_output - weighted_neg_output
+
 
                 # should check that users pass in sparse labels
                 # Only look at the user-specified label
@@ -130,7 +147,7 @@ class IntGradSG(object):
                         grad_outputs=torch.ones_like(batch_output).to(DEFAULT_DEVICE),
                         create_graph=True)
 
-                if self.cal_type == 'valid_intp':
+                if self.est_method == 'valid_ip':
                     grad_tensor[:, b_id, k_id, :] = model_grads[0].detach().data/self.k
                 else:
                     grad_tensor[:, b_id, :] += model_grads[0].detach().data / self.k
@@ -156,7 +173,7 @@ class IntGradSG(object):
         std_dev = std_factor * (input_tensor.max().item() - input_tensor.min().item())
         ref_lst = [torch.normal(mean=torch.zeros_like(input_tensor), std=std_dev) for _ in range(self.bg_size)]
         reference_tensor = torch.stack(ref_lst, dim=0).cuda()
-        reference_tensor += input_tensor.unsqueeze(1)
+        reference_tensor += input_tensor.unsqueeze(0)
         reference_tensor = torch.clamp(reference_tensor, min=0., max=1.)
         reference_tensor = preprocess(reference_tensor.reshape(-1, shape[-3], shape[-2], shape[-1]))
         input_tensor = preprocess(input_tensor)
@@ -169,8 +186,8 @@ class IntGradSG(object):
     def shap_values(self, input_tensor, sparse_labels=None):
         input_tensor, samples_input, reference_tensor = self.chew_input(input_tensor)
 
-        if self.cal_type == 'valid_intp':
-            samples_delta = self._get_samples_delta(samples_input, reference_tensor)
+        if self.est_method == 'valid_ip':
+            samples_delta = self._get_samples_delta(input_tensor, samples_input)  # samples_input, reference_tensor
             grad_ori_tensor = self._get_grads(samples_input, sparse_labels)
             grad_ori_tensor = grad_ori_tensor.squeeze(2)
             grad_ori_tensor = grad_ori_tensor.reshape(samples_delta.shape)
@@ -181,7 +198,7 @@ class IntGradSG(object):
             counts = torch.sum(grad_sign, dim=1)
             mult_grads = mult_grads.sum(1) / torch.where(counts == 0., torch.ones(counts.shape).cuda(), counts)
             attribution = mult_grads
-        elif self.cal_type == 'valid_ref':
+        elif self.est_method == 'valid_ref':
             samples_delta = self._get_samples_delta(input_tensor, reference_tensor)
             grad_tensor = self._get_grads(samples_input, sparse_labels)
             zeros = torch.zeros(grad_tensor.shape).cuda()
@@ -196,8 +213,7 @@ class IntGradSG(object):
         else:
             samples_delta = self._get_samples_delta(input_tensor, reference_tensor)
             grad_tensor = self._get_grads(samples_input, sparse_labels)
-            mult_grads = samples_delta * grad_tensor if self.scale_by_inputs else grad_tensor
-
+            mult_grads = samples_delta * grad_tensor
             attribution = mult_grads.mean(1)
 
         return attribution
