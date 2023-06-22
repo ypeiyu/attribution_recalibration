@@ -1,9 +1,9 @@
-#!/usr/bin/env python
 import functools
 import operator
 
 import torch
 from torch.autograd import grad
+import torch.nn.functional as F
 
 DEFAULT_DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -39,12 +39,11 @@ def gather_nd(params, indices):
 
 
 class IntegratedGradients(object):
-    def __init__(self, model, k=1, contrastive=False, logit=True):
+    def __init__(self, model, k=10,  exp_obj='logit'):
         self.model = model
         self.model.eval()
         self.k = k
-        self.contrastive = contrastive
-        self.logit = logit
+        self.exp_obj = exp_obj
 
     def _get_samples_input(self, input_tensor, reference_tensor):
         '''
@@ -101,25 +100,38 @@ class IntegratedGradients(object):
         for i in range(self.k):
             particular_slice = samples_input[:, i]
             output = self.model(particular_slice)
-            batch_output = output
-            if not self.logit:
+
+            if self.exp_obj == 'logit':
+                batch_output = output
+            elif self.exp_obj == 'prob':
                 batch_output = torch.log_softmax(output, 1)
+            elif self.exp_obj == 'contrast':
+                neg_cls_indices = torch.arange(output.size(1))[
+                    ~torch.eq(torch.unsqueeze(output, dim=1), sparse_labels)]
+                neg_cls_output = torch.index_select(output, dim=1, index=neg_cls_indices)
+                neg_weight = F.softmax(neg_cls_output, dim=1)
+                weighted_neg_output = (neg_weight * neg_cls_output).sum(dim=1)
+                pos_cls_indices = torch.arange(output.size(1))[torch.eq(torch.unsqueeze(output, dim=1), sparse_labels)]
+                neg_cls_output = torch.index_select(output, dim=1, index=pos_cls_indices)
+                output = neg_cls_output - weighted_neg_output
+                batch_output = output
 
             # should check that users pass in sparse labels
             # Only look at the user-specified label
-            if sparse_labels is not None and batch_output.size(1) > 1:
+            if sparse_labels is not None and batch_output.size(1) > 1 and self.exp_obj != 'contrast':
                 sample_indices = torch.arange(0, batch_output.size(0)).to(DEFAULT_DEVICE)
                 indices_tensor = torch.cat([
-                        sample_indices.unsqueeze(1),
-                        sparse_labels.unsqueeze(1)], dim=1)
+                    sample_indices.unsqueeze(1),
+                    sparse_labels.unsqueeze(1)], dim=1)
                 batch_output = gather_nd(batch_output, indices_tensor)
+
             self.model.zero_grad()
             model_grads = grad(
                     outputs=batch_output,
                     inputs=particular_slice,
                     grad_outputs=torch.ones_like(batch_output).to(DEFAULT_DEVICE),
                     create_graph=True)
-            grad_tensor[:, i, :] = model_grads[0].detach().data  # detach
+            grad_tensor[:, i, :] = model_grads[0].detach().data
         return grad_tensor
 
     def shap_values(self, input_tensor, sparse_labels=None):

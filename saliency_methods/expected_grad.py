@@ -5,8 +5,7 @@ from .IG_SG import IntGradSG
 
 
 class ExpectedGradients(IntGradSG):
-    def __init__(self, model, k, bg_size, bg_dataset, batch_size, random_alpha=True, est_method='vanilla',
-                 exp_obj='logit'):
+    def __init__(self, model, k, bg_size, bg_dataset, batch_size, random_alpha=True, est_method='vanilla', exp_obj='logit'):
         super(ExpectedGradients, self).__init__(model, k, bg_size, random_alpha, est_method)
         self.bg_size = bg_size
         self.random_alpha = random_alpha

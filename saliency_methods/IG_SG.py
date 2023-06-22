@@ -119,7 +119,7 @@ class IntGradSG(object):
                 if self.exp_obj == 'logit':
                     batch_output = output
                 elif self.exp_obj == 'prob':
-                    batch_output = output
+                    batch_output = torch.log_softmax(output, 1)
                 elif self.exp_obj == 'contrast':
                     neg_cls_indices = torch.arange(output.size(1))[
                         ~torch.eq(torch.unsqueeze(output, dim=1), sparse_labels)]
@@ -129,11 +129,11 @@ class IntGradSG(object):
                     pos_cls_indices = torch.arange(output.size(1))[torch.eq(torch.unsqueeze(output, dim=1), sparse_labels)]
                     neg_cls_output = torch.index_select(output, dim=1, index=pos_cls_indices)
                     output = neg_cls_output - weighted_neg_output
-
+                    batch_output = output
 
                 # should check that users pass in sparse labels
                 # Only look at the user-specified label
-                if sparse_labels is not None and batch_output.size(1) > 1:
+                if sparse_labels is not None and batch_output.size(1) > 1 and self.exp_obj != 'contrast':
                     sample_indices = torch.arange(0, batch_output.size(0)).to(DEFAULT_DEVICE)
                     indices_tensor = torch.cat([
                             sample_indices.unsqueeze(1),

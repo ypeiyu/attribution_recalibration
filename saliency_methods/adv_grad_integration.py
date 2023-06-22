@@ -40,14 +40,15 @@ def gather_nd(params, indices):
 
 
 class AGI(object):
-    def __init__(self, model, k, top_k, cls_num, eps=0.05, scale_by_input=False, cal_type=['vanilla', 'valid_ref', 'valid_intp'][0]):
+    def __init__(self, model, k, top_k, cls_num, eps=0.05, scale_by_input=False, est_method='vanilla', exp_obj='logit'):
         self.model = model
         self.cls_num = cls_num - 1
         self.eps = eps
         self.k = k
         self.top_k = top_k
         self.scale_by_input = scale_by_input
-        self.cal_type = cal_type
+        self.est_method = est_method
+        self.exp_obj = exp_obj
 
     def select_id(self, label):
         while True:
@@ -69,7 +70,7 @@ class AGI(object):
         delta = perturbed_rect - image
         delta = - data_grad_lab * delta
 
-        if self.cal_type == 'valid_intp':
+        if self.est_method == 'valid_ip':
             valid_num = torch.where(delta >= 0., 1., 0.)
             valid_delta = torch.where(delta >= 0., delta, torch.zeros(*delta.shape).cuda())
             return perturbed_rect, valid_delta, valid_num
@@ -117,14 +118,14 @@ class AGI(object):
                 create_graph=True)
             data_grad_lab = model_grads[0].detach().data
 
-            if self.cal_type == 'valid_intp':
+            if self.est_method == 'valid_ip':
                 perturbed_image, delta, eff_sign = self.fgsm_step(image, epsilon, data_grad_adv, data_grad_lab)
                 sign += eff_sign
                 c_delta += delta
             else:
                 perturbed_image, delta = self.fgsm_step(image, epsilon, data_grad_adv, data_grad_lab)
 
-        if self.cal_type == 'valid_intp':
+        if self.est_method == 'valid_ip':
             c_delta = c_delta / torch.where(sign == 0., 1., sign)
         else:
             c_delta = c_delta
@@ -150,11 +151,11 @@ class AGI(object):
             targeted = top_ids[:, l].cuda()
             delta = self.pgd_step(undo_preprocess(input_tensor), self.eps, self.model, init_pred, targeted, self.k)
 
-            if self.cal_type == 'valid_intp':
+            if self.est_method == 'valid_ip':
                 delta = delta / torch.where(delta == 0., 1., sign)
                 step_grad += delta
                 attribution = step_grad
-            elif self.cal_type == 'valid_ref':
+            elif self.est_method == 'valid_ref':
                 samples_delta = self._get_samples_delta(input_tensor, reference_tensor)
                 grad_tensor = self._get_grads(samples_input, sparse_labels)
                 zeros = torch.zeros(grad_tensor.shape).cuda()
