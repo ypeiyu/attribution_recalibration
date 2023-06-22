@@ -57,15 +57,21 @@ args = parser.parse_args()
 def load_explainer(model, **kwargs):
     method_name = kwargs['method_name']
     if method_name == 'Random':
-        # ================= Random Baseline ==================
         random = RandomBaseline()
         return random
+    # -------------------- gradient based -------------------------
     elif method_name == 'InputGrad':
-        # ================= Input Gradients ==================
         input_grad = Gradients(model, exp_obj=kwargs['exp_obj'])
         return input_grad
+    elif method_name == 'FullGrad':
+        full_grad = FullGrad(model, exp_obj=kwargs['exp_obj'], im_size=(3, 224, 224))
+        return full_grad
+    elif method_name == 'SmoothGrad':
+        smooth_grad = SmoothGrad(model, bg_size=kwargs['bg_size'], exp_obj=kwargs['exp_obj'], std_spread=0.15)
+        return smooth_grad
+
+    # -------------------- integration based -------------------------
     elif method_name == 'IntGrad':
-        # ============================ Integrated Gradients ============================
         integrated_grad = IntegratedGradients(model, k=kwargs['k'], exp_obj=kwargs['exp_obj'])
         return integrated_grad
     elif method_name == 'ExpGrad':
@@ -73,34 +79,21 @@ def load_explainer(model, **kwargs):
                                           batch_size=kwargs['bg_batch_size'], random_alpha=kwargs['random_alpha'],
                                           est_method=kwargs['est_method'], exp_obj=kwargs['exp_obj'])
         return expected_grad
+
+    # -------------------- IG based -------------------------
     elif method_name == 'IG_Uniform':
-        # ============================ IG_Uniform ============================
         int_grad_uni = IntGradUniform(model, k=kwargs['k'], bg_size=kwargs['bg_size'], random_alpha=kwargs['random_alpha'],
                                       est_method=kwargs['est_method'], exp_obj=kwargs['exp_obj'])
         return int_grad_uni
     elif method_name == 'IG_SG':
-        # ============================ IG_SG ============================
         int_grad_sg = IntGradSG(model, k=kwargs['k'], bg_size=kwargs['bg_size'], random_alpha=kwargs['random_alpha'],
                                 est_method=kwargs['est_method'], exp_obj=kwargs['exp_obj'])
         return int_grad_sg
     elif method_name == 'IG_SQ':
-        # ============================ IG_SQ ============================
         int_grad_sq = IntGradSQ(model, k=kwargs['k'], bg_size=kwargs['bg_size'], random_alpha=kwargs['random_alpha'],
                                 est_method=kwargs['est_method'], exp_obj=kwargs['exp_obj'])
         return int_grad_sq
-
-
-    elif method_name == 'FullGrad':
-        # ================= Full Gradients ==================
-        full_grad = FullGrad(model)
-        return full_grad
-    elif method_name == 'SmoothGrad':
-        # ================= Smooth Gradients ==================
-        num_samples = kwargs['num_samples']
-        smooth_grad = SmoothGrad(model, num_samples=num_samples)
-        return smooth_grad
     elif method_name == 'AGI':
-        # ================= AGI ==================
         k = kwargs['k']
         top_k = kwargs['top_k']
         cls_num = kwargs['cls_num']
@@ -220,6 +213,9 @@ def evaluate(method_name, model_name, dataset_name, metric, k=None, bg_size=None
     explainer_args = {
         'Random': {},
         'InputGrad': {'method_name': method_name, 'exp_obj': exp_obj},
+        'FullGrad': {'method_name': method_name, 'exp_obj': exp_obj},
+        'SmoothGrad': {'method_name': method_name, 'bg_size':bg_size, 'exp_obj': exp_obj},
+
         'IntGrad': {'method_name': method_name, 'k': k, 'exp_obj': exp_obj},
         'ExpGrad': {'method_name': method_name, 'k': k, 'bg_size': bg_size, 'bg_dataset': train_dataset,
                     'bg_batch_size': test_bth, 'random_alpha': True, 'est_method': est_method, 'exp_obj': exp_obj},
