@@ -228,7 +228,36 @@ def evaluate(method_name, model_name, dataset_name, metric, k=None, bg_size=None
                   'est_method': est_method, 'exp_obj': exp_obj},
     }
 
-    if metric == 'sanity_check':
+    explainer = load_explainer(model=model, **explainer_args[method_name])
+    evaluator = Evaluator(model, explainer=explainer, dataloader=test_loader)
+
+    if metric == 'DiffID':
+        if method_name == 'LPI':
+            cent_num = explainer_args['LPI']['num_centers']
+            centers = None
+            if cent_num > 1:
+                centers = np.load(
+                    'dataset_distribution/' + model_name +
+                    '/kmeans_' + model_name + '_n' + str(cent_num) + '_centers.npy')
+            evaluator.DiffID(ratio_lst=[step * 0.1 for step in range(1, 10)], centers=centers)
+        else:
+            evaluator.DiffID(ratio_lst=[step * 0.1 for step in range(1, 10)])
+
+    elif metric == 'visualize':
+        num_vis_samples = 500
+        f_name = 'exp_fig/' + method_name + '_' + model_name + '/'
+        evaluator.visual_inspection(file_name=f_name, num_vis=num_vis_samples, method_name=method_name)
+
+    elif metric == 'sensitivity_n':
+        baseline_names = ['rand', 'zero']
+        ratio_lst = [step * 0.1 for step in range(1, 10)]
+        post_hoc_lst = ['abs', 'sum']
+
+        for b_name in baseline_names:
+            for post_hoc in post_hoc_lst:
+                evaluator.sensitivity_n(baseline_name=b_name, ratio_lst=ratio_lst, post_hoc=post_hoc)
+
+    elif metric == 'sanity_check':
         if dataset_name == 'MNIST':
 
             saliency_map_lst = []
@@ -258,13 +287,13 @@ def evaluate(method_name, model_name, dataset_name, metric, k=None, bg_size=None
                 model = torch.nn.DataParallel(model)
                 model.eval()
 
-                rand_order = randomization_order[:ind+1]  # [:ind+1]
+                rand_order = randomization_order[:ind+1]
                 for name, param in model.named_parameters():
                     for p_name in rand_order:
                         if p_name in name:
                             std, mean = torch.std_mean(param.data)
-                            std_factor = 1.0  # 0.2
-                            std *= std_factor  # 1.0forall 0.2forAGI
+                            std_factor = 1.0
+                            std *= std_factor
                             if name.endswith('conv.weight') or name.endswith('bn.bias') or name.endswith('fc.weight') or name.endswith('fc.bias'):
                                 param.data = param.data.normal_(mean=mean, std=std)
 
@@ -275,11 +304,12 @@ def evaluate(method_name, model_name, dataset_name, metric, k=None, bg_size=None
                 # ------------ experimentor ---------------
                 explainer = load_explainer(model=model, **explainer_args[method_name])
                 evaluator = Evaluator(model, explainer=explainer, dataloader=test_loader)
-                num_checks = 20  # 20
-                num_vis_checks = 50  # 20
+                num_checks = 20
+                num_vis_checks = 50
                 if model_name == 'inception_v3_vis':
                     param_ind_f = str(ind).zfill(2)
-                    evaluator.visual_inspection(file_name='exp_fig/Figure_sanity/'+method_name + '/', num_vis=num_vis_checks, method_name=param_ind_f+method_name + '_' + str(randomization_order[ind]))
+                    evaluator.visual_inspection(file_name='exp_fig/Figure_sanity/'+method_name + '/',
+                                                num_vis=num_vis_checks, method_name=param_ind_f+method_name + '_' + str(randomization_order[ind]))
                 if model_name == 'inception_v3':
                     saliency_map_lst.append(evaluator.sanity_inspection(num_vis=num_checks))
 
@@ -289,28 +319,8 @@ def evaluate(method_name, model_name, dataset_name, metric, k=None, bg_size=None
                 print(saliency_map_set.shape)
                 np.save(file_name, saliency_map_set)
 
-    if metric == 'DiffID':
-        explainer = load_explainer(model=model, **explainer_args[method_name])
-        evaluator = Evaluator(model, explainer=explainer, dataloader=test_loader)
-
-        # --------------------- perturb experiments ----------------------
-        if method_name == 'LPI':
-            cent_num = explainer_args['LPI']['num_centers']
-            centers = None
-            if cent_num > 1:
-                centers = np.load(
-                    'dataset_distribution/' + model_name +
-                    '/kmeans_' + model_name + '_n' + str(cent_num) + '_centers.npy')
-            evaluator.DiffID(ratio_lst=[step * 0.1 for step in range(1, 10)], centers=centers)
-        else:
-            evaluator.DiffID(ratio_lst=[step * 0.1 for step in range(1, 10)])
-
-    if metric == 'visualize':
-        num_vis_samples = 500
-        f_name = 'exp_fig/' + method_name + '_' + model_name + '/'
-        explainer = load_explainer(model=model, **explainer_args[method_name])
-        evaluator = Evaluator(model, explainer=explainer, dataloader=test_loader)
-        evaluator.visual_inspection(file_name=f_name, num_vis=num_vis_samples, method_name=method_name)
+    else:
+        raise NotImplementedError('%s is not implemented.' % metric)
 
 
 if __name__ == '__main__':
