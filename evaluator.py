@@ -49,20 +49,15 @@ class Evaluator(object):
         self.explainer = explainer
         self.dataloader = dataloader
         self.log = log
-        self.n_examples = 0
-        self.n_correct = 0
-        self.n_pert_correct = 0
-        self.NL_difference = []
+
         self.model.eval()
 
     def DiffID(self, ratio_lst, centers=None):
         log = self.log
-        self.n_examples = 0
-        self.n_correct = 0
-
+        n_examples = 0
+        n_correct = 0
         loc_ind = 0
         ratio_len = len(ratio_lst)
-
         n_pert_correct_del_ins_lst = [[0 for _ in range(ratio_len)], [0 for _ in range(ratio_len)]]
         logit_change_del_ins_lst = [[torch.zeros(len(self.dataloader.dataset.samples)) for _ in range(ratio_len)],
                                     [torch.zeros(len(self.dataloader.dataset.samples)) for _ in range(ratio_len)]]
@@ -76,8 +71,8 @@ class Evaluator(object):
 
             output = self.model(batch_image).detach()
             _, predicted = torch.max(output.data, 1)
-            self.n_correct += (predicted == target).sum().item()
-            self.n_examples += batch_size
+            n_correct += (predicted == target).sum().item()
+            n_examples += batch_size
 
             # ------------------ attribution estimation -------------------------
             if centers is not None:
@@ -138,13 +133,13 @@ class Evaluator(object):
         DiffID_acc = []
 
         for r_ind in range(ratio_len):
-            mean_accu_del = n_pert_correct_del_ins_lst[1][r_ind] / self.n_examples
+            mean_accu_del = n_pert_correct_del_ins_lst[1][r_ind] / n_examples
             var_del, mean_del = torch.var_mean(logit_change_del_ins_lst[1][r_ind], unbiased=False)
             mean_del = mean_del.item()
             deletion_logit.append(round(mean_del, 3))
             deletion_acc.append(round(mean_accu_del, 3))
 
-            mean_accu_ins = n_pert_correct_del_ins_lst[0][r_ind] / self.n_examples
+            mean_accu_ins = n_pert_correct_del_ins_lst[0][r_ind] / n_examples
             var_ins, mean_ins = torch.var_mean(logit_change_del_ins_lst[0][r_ind], unbiased=False)
             mean_ins = mean_ins.item()
             insertion_logit.append(round(mean_ins, 3))
@@ -205,10 +200,8 @@ class Evaluator(object):
             saliency_norm_lst.append(saliency_map)
         return np.array(saliency_norm_lst)
 
-    def converge_exp(self, baseline_name, q_ratio_lst, centers=None, post_hoc='abs'):
-        log = self.log
-        self.n_examples = 0
-        self.n_correct = 0
+    def sensitivity_n(self, baseline_name, q_ratio_lst, centers=None, post_hoc='abs'):
+        n_examples = 0
         pcc_lst = [[] for _ in range(len(q_ratio_lst))]
 
         start = time.time()
@@ -224,8 +217,7 @@ class Evaluator(object):
             ####################################
             # output = torch.softmax(output, 1)
             _, predicted = torch.max(output.data, 1)
-            self.n_correct += (predicted == target).sum().item()
-            self.n_examples += batch_size
+            n_examples += batch_size
 
             if centers is not None:
                 # ---------------- LPI ---------------------
@@ -255,12 +247,6 @@ class Evaluator(object):
                     mask = torch.bernoulli(mask)
 
                     sum_attr = torch.sum((saliency_map * mask).view([saliency_map.size(0), -1]), -1)
-                    # sum_attr = sum_attr.view([sum_attr.size(0), -1])
-                    # sum_attr = torch.sum(sum_attr, dim=1)
-
-                    # val = torch.mean(image[1-mask])
-                    # mean_val = torch.mean()
-                    # img = torch.where(mask == 1., image, mean_val)
 
                     if baseline_name == 'rand':
                         rand_ref = torch.rand(*image.shape).cuda()
@@ -310,11 +296,11 @@ class Evaluator(object):
         print()
 
         end = time.time()
-        log('\ttime: \t{:.3f}'.format(end - start))
+        self.log('\ttime: \t{:.3f}'.format(end - start))
 
         # for ind, pcc in enumerate(pcc_lst):
         #     print(ind)
-        #     print(pcc/self.n_examples)
+        #     print(pcc/n_examples)
         #     print('\n')
 
     #     self.NL_difference = []
