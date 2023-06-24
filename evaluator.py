@@ -200,11 +200,10 @@ class Evaluator(object):
             saliency_norm_lst.append(saliency_map)
         return np.array(saliency_norm_lst)
 
-    def sensitivity_n(self, baseline_name, q_ratio_lst, centers=None, post_hoc='abs'):
-        n_examples = 0
-        pcc_lst = [[] for _ in range(len(q_ratio_lst))]
-
+    def sensitivity_n(self, baseline_name, ratio_lst, centers=None, post_hoc='abs'):
         start = time.time()
+        n_examples = 0
+        pcc_lst = [[] for _ in range(len(ratio_lst))]
 
         for batch_num, (image, label) in enumerate(self.dataloader):
             image = image.cuda()
@@ -212,10 +211,6 @@ class Evaluator(object):
             batch_size = image.shape[0]
 
             output = self.model(image).detach()
-            ####################################
-            ######### for softmax loss #########
-            ####################################
-            # output = torch.softmax(output, 1)
             _, predicted = torch.max(output.data, 1)
             n_examples += batch_size
 
@@ -227,18 +222,15 @@ class Evaluator(object):
             else:
                 saliency_map = self.explainer.shap_values(image, sparse_labels=target)
 
-            # -------------------------------- saliency map normalization -----------------------------------------
-            # saliency_map = normalize_saliency_map(saliency_map.detach())
-            # saliency_map = saliency_map.detach()
             if post_hoc == 'abs':
                 saliency_map = torch.sum(torch.abs(saliency_map), dim=1, keepdim=True)
-            else:
+            elif post_hoc == 'sum':
                 saliency_map = torch.sum(saliency_map, dim=1, keepdim=True)
 
             self.model.eval()
 
             results_all = []
-            for q_ind, q_ratio in enumerate(q_ratio_lst):
+            for q_ind, q_ratio in enumerate(ratio_lst):
                 attr_lst = []
                 output_diff_lst = []
                 for sample_ind in range(10):
@@ -250,21 +242,14 @@ class Evaluator(object):
 
                     if baseline_name == 'rand':
                         rand_ref = torch.rand(*image.shape).cuda()
-                        ### if mnist
-                        # from utils import preprocess_input_function
-                        # rand_ref = preprocess_input_function(rand_ref)
                         img_ref = torch.where(mask==1., rand_ref, image)
                     elif baseline_name == 'mean':
                         mean_ref = (image*(1.-mask)).view((image.shape[0], -1)) / torch.sum(mask.view((mask.shape[0], -1)))
                         img_ref = mean_ref.view(*image.shape)
                     elif baseline_name == 'zero':
                         img_ref = image * (1.-mask)
-                    output_pert = self.model(img_ref).detach()
-                    ####################################
-                    ######### for softmax loss #########
-                    ####################################
-                    # output_pert = torch.softmax(output_pert, 1)
 
+                    output_pert = self.model(img_ref).detach()
                     indices_tensor = torch.cat([torch.arange(0, output.shape[0]).cuda().unsqueeze(1), target.unsqueeze(1)], dim=1)
                     output_pert = gather_nd(output_pert, indices_tensor)
                     output_ori = gather_nd(output, indices_tensor)
@@ -281,9 +266,7 @@ class Evaluator(object):
                 # ------------------- computing pcc correlation -----------------
                 for i in range(output.shape[0]):
                     attr_temp, out_temp = attr_tensor[:, i].reshape(-1), output_diff_tensor[:, i].reshape(-1)
-                    from scipy.stats import spearmanr as spr
                     from scipy.stats import pearsonr as pr
-                    # spr_corr, _ = spr(np.array(attr_temp.cpu()).flatten(), np.array(out_temp.cpu()).flatten())
                     pr_corr, _ = pr(np.array(attr_temp.cpu()).flatten(), np.array(out_temp.cpu()).flatten())
                     if not np.isnan(pr_corr):
                         pcc_lst[r_ind].append(pr_corr)
@@ -291,73 +274,7 @@ class Evaluator(object):
         pc_mean = np.around(np.mean(pcc_arr, axis=1), 3)
         pc_std = np.around(np.std(pcc_arr, axis=1), 3)
 
-        print(list(pc_mean))
-        print(list(pc_std))
-        print()
-
+        self.log(list(pc_mean))
+        self.log(list(pc_std))
         end = time.time()
         self.log('\ttime: \t{:.3f}'.format(end - start))
-
-        # for ind, pcc in enumerate(pcc_lst):
-        #     print(ind)
-        #     print(pcc/n_examples)
-        #     print('\n')
-
-    #     self.NL_difference = []
-    #     if ref_dataset is not None:
-    #         ref_dataloader = DataLoader(
-    #             dataset=ref_dataset,
-    #             batch_size=1,
-    #             shuffle=False,
-    #             drop_last=False)
-    #     for batch_num, (image, label) in enumerate(self.dataloader):
-    #         image = image.cuda()
-    #         target = label.cuda()
-    #
-    #         # img = cv2.imread('/home/zeyiwen/peiyu/grad-saliency-master/exp_fig/IG_2/img_85_origin.jpg')
-    #         # img = np.float32(img.transpose(2, 0, 1))
-    #         # img = img - img.min()
-    #         # img = img / img.max()
-    #         # img_tensor = torch.from_numpy(img).unsqueeze(0).cuda()
-    #         # from utils import preprocess_input_function
-    #         # img_tensor = preprocess_input_function(img_tensor)
-    #         # image = img_tensor
-    #         # target = torch.tensor([16], dtype=torch.int64).cuda()
-    #         # saliency_map = self.explainer.shap_values(image, sparse_labels=target)
-    #
-    #         output_start = self.model(image)[:, target].detach()
-    #
-    #         # reference_tensor = torch.zeros(*list(image.shape)).cuda()
-    #         # reference_tensor = preprocess_input_function(reference_tensor)
-    #         output_end = self.model(reference_tensor)[:, target].detach()
-    #
-    #         change = output_end - output_start
-    #         print(change)
-    #
-    #         # ----------------------- plot shap for specific class --------------------------------
-    #         saliency_map = self.explainer.shap_values(image, sparse_labels=target)
-    #         saliency_map = torch.sum(saliency_map)
-    #         if isinstance(self.explainer, IntegratedGradients):
-    #             output_start = self.model(image)[:, target]
-    #             image = image*0.
-    #             output_end = self.model(image)[:, target]
-    #             output_change = output_start-output_end
-    #
-    #         else:
-    #             output_start = self.model(image)[:, target]
-    #             # output_end
-    #             output_change = 0.
-    #             for bth_n, (img_ref, lbl_ref) in enumerate(ref_dataloader):
-    #                 # lbl_ref = lbl_ref.cuda()
-    #                 img_ref = img_ref.cuda()
-    #                 output_end = self.model(img_ref)[:, target]
-    #                 output_change += output_start-output_end
-    #             output_change = output_change/k
-    #         output_change = torch.abs(output_change - saliency_map).data.detach().cpu().numpy()
-    #         self.NL_difference.append(output_change)
-        # print('the number of segments: {}'.format(k))
-        # NL_difference_mean = np.mean(np.array(self.NL_difference))
-        # NL_difference_std = np.std(np.array(self.NL_difference))
-        # print('difference mean {:.4}'.format(NL_difference_mean))
-        # print('difference standard variation {:.4}'.format(NL_difference_std))
-        # print('----------------')
