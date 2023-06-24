@@ -126,7 +126,6 @@ def load_dataset(dataset_name, test_batch_size):
                     transforms.Normalize(mean=mean, std=std),
                 ]))
 
-
         imagenet_val_loader = torch.utils.data.DataLoader(
             imagenet_val_dataset, batch_size=test_batch_size,
             shuffle=False, num_workers=4, pin_memory=False)
@@ -207,6 +206,7 @@ def evaluate(method_name, model_name, dataset_name, metric, k=None, bg_size=None
 
     # =================== load train dataset & test loader ========================
     test_bth = 32
+
     train_dataset, test_loader = load_dataset(dataset_name=dataset_name, test_batch_size=test_bth)
 
     # =================== load explainer ========================
@@ -299,7 +299,7 @@ def evaluate(method_name, model_name, dataset_name, metric, k=None, bg_size=None
             centers = None
             if cent_num > 1:
                 centers = np.load(
-                    '/home/peiyu/PROJECT/grad-saliency-master/dataset_distribution/' + model_name +
+                    'dataset_distribution/' + model_name +
                     '/kmeans_' + model_name + '_n' + str(cent_num) + '_centers.npy')
             evaluator.DiffID(ratio_lst=[step * 0.1 for step in range(1, 10)], centers=centers)
         else:
@@ -307,7 +307,7 @@ def evaluate(method_name, model_name, dataset_name, metric, k=None, bg_size=None
 
     if metric == 'visualize':
         num_vis_samples = 500
-        f_name = 'exp_fig/' + method_name + '_' + model_name + '_sg_vis/'
+        f_name = 'exp_fig/' + method_name + '_' + model_name + '/'
         explainer = load_explainer(model=model, **explainer_args[method_name])
         evaluator = Evaluator(model, explainer=explainer, dataloader=test_loader)
         evaluator.visual_inspection(file_name=f_name, num_vis=num_vis_samples, method_name=method_name)
