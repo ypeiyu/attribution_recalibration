@@ -22,15 +22,15 @@ Due to its desirable theoretical properties, path integration is a widely used s
 
 ## Incorporated Attribution Methods
 - **Input Gradients** [[Paper](https://arxiv.org/pdf/1312.6034.pdf)]
-- **Smooth Gradients** [[Paper]()]
-- **Full-Gradients** [[Paper]()]
+- **Smooth Gradients** [[Paper](https://arxiv.org/pdf/1706.03825.pdf?source=post_page---------------------------)]
+- **Full-Gradients** [[Paper](https://proceedings.neurips.cc/paper/2019/file/80537a945c7aaa788ccfcdf1b99b5d8f-Paper.pdf)]
 - **Integrated Gradients (IG)** [[Paper](http://proceedings.mlr.press/v70/sundararajan17a/sundararajan17a.pdf)]
-- **IG with Smooth Gradients** [[Paper]()]
-- **IG with Squared Gradients** [[Paper]()]
-- **IG with Uniform References** [[Paper]()]
+- **IG with Smooth Gradients** [[Paper](https://arxiv.org/pdf/1706.03825.pdf?source=post_page---------------------------)]
+- **IG with Squared Gradients** [[Paper](https://proceedings.neurips.cc/paper/2019/file/fe4b8556000d0f0cae99daa5c5c5a410-Paper.pdf)]
+- **IG with Uniform References** [[Paper](https://distill.pub/2020/attribution-baselines/?utm_source=researcher_app&utm_medium=referral&utm_campaign=RESR_MRKT_Researcher_inbound)]
 - **Expected Gradients** [[Paper](https://openreview.net/pdf?id=rygPm64tDH)]
 - **Adversarial Gradient Integration** [[Paper](https://www.ijcai.org/proceedings/2021/0396.pdf)]
-- **Local Gradient Integration** [[Paper]()]
+- **Local Gradient Integration** [[Paper](https://scholar.google.com.au/citations?view_op=view_citation&hl=zh-CN&user=Xqmlj18AAAAJ&sortby=pubdate&citation_for_view=Xqmlj18AAAAJ:W5xh706n7nkC)]
 
 ## Re-calibrating attributions
 
