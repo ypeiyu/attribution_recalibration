@@ -18,6 +18,19 @@ Due to its desirable theoretical properties, path integration is a widely used s
 - numpy 1.21.5
 - pytorch 1.12.0
 - torchvision 0.13.1
+- tqdm 4.64.0
+
+## Incorporated Attribution Methods
+- **Input Gradients** [[Paper](https://arxiv.org/pdf/1312.6034.pdf)]
+- **Smooth Gradients** [[Paper]()]
+- **Full-Gradients** [[Paper]()]
+- **Integrated Gradients (IG)** [[Paper](http://proceedings.mlr.press/v70/sundararajan17a/sundararajan17a.pdf)]
+- **IG with Smooth Gradients** [[Paper]()]
+- **IG with Squared Gradients** [[Paper]()]
+- **IG with Uniform References** [[Paper]()]
+- **Expected Gradients** [[Paper](https://openreview.net/pdf?id=rygPm64tDH)]
+- **Adversarial Gradient Integration** [[Paper](https://www.ijcai.org/proceedings/2021/0396.pdf)]
+- **Local Gradient Integration** [[Paper]()]
 
 ## Re-calibrating attributions
 
@@ -31,13 +44,13 @@ dataset\DATASET
 pretrained_models\YOUR_MODEL
 ```
 
-### Step 3: Re-calibrating attributions (IG_Uniform).
+### Step 3: Re-calibrating attributions (*IG Uniform*).
 
 ```
 python main.py -attr_method=IG_Uniform -model resnet34 -dataset ImageNet -metric visualize -k 5 -bg_size 10
 ```
 
-## Quantitatively Evaluations
+## Quantitatively evaluations
 ```
 python main.py -attr_method=IG_Uniform -model resnet34 -dataset ImageNet -metric DiffID -k 5 -bg_size 10
 ```
