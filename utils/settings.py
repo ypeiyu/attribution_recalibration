@@ -5,18 +5,18 @@ parser_choices = {
                     'SmoothGrad', 'Random'],
     'model': ['resnet34', 'vgg16', 'MLP'],
     'dataset': ['ImageNet', 'CIFAR-10', 'CIFAT-100', 'MNIST'],
-    'metric': ['pixel_perturb', 'sanity_check'],
+    'metric': ['DiffID', 'visualize', 'sensitivity_n', 'sanity_check'],
     'est_method': ['vanilla', 'valid_ip', 'valid_ref'],
     'exp_obj': ['logit', 'prob', 'contrast'],
 }
 
 parser_default = {
-    'attr_method': 'IG_SG',
+    'attr_method': 'IG_Uniform',
     'model': 'resnet34',
     'dataset': 'ImageNet',
     'metric': 'DiffID',
     'k': 5,
     'bg_size': 20,
-    'est_method': 'valid_ref',
+    'est_method': 'vanilla',
     'exp_obj': 'logit',
 }
