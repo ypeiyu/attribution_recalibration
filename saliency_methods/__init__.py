@@ -8,4 +8,4 @@ from .random_baseline import RandomBaseline
 from .IG_Uniform import IntGradUniform
 from .IG_SG import IntGradSG
 from .IG_SQ import IntGradSQ
-
+from .grad_cam import GradCAM

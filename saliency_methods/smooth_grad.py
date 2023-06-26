@@ -44,14 +44,14 @@ class SmoothGrad():
         elif self.exp_obj == 'prob':
             batch_output = torch.log_softmax(output, 1)
         elif self.exp_obj == 'contrast':
-            neg_cls_indices = torch.arange(output.size(1))[
-                ~torch.eq(torch.unsqueeze(output, dim=1), target_class)]
-            neg_cls_output = torch.index_select(output, dim=1, index=neg_cls_indices)
+            b_num, c_num = output.shape[0], output.shape[1]
+            mask = torch.ones(b_num, c_num, dtype=torch.bool)
+            mask[torch.arange(b_num), sparse_labels] = False
+            neg_cls_output = output[mask].reshape(b_num, c_num - 1)
             neg_weight = F.softmax(neg_cls_output, dim=1)
             weighted_neg_output = (neg_weight * neg_cls_output).sum(dim=1)
-            pos_cls_indices = torch.arange(output.size(1))[torch.eq(torch.unsqueeze(output, dim=1), target_class)]
-            neg_cls_output = torch.index_select(output, dim=1, index=pos_cls_indices)
-            output = neg_cls_output - weighted_neg_output
+            pos_cls_output = output[torch.arange(b_num), sparse_labels]
+            output = pos_cls_output - weighted_neg_output
             batch_output = output
         out = batch_output
         loss = out
