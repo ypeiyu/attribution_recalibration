@@ -22,6 +22,7 @@ Due to its desirable theoretical properties, path integration is a widely used s
 
 ## Incorporated Attribution Methods
 - **Input Gradients** [[Paper](https://arxiv.org/pdf/1312.6034.pdf)]
+- **Grad CAM** [[Paper](https://openaccess.thecvf.com/content_ICCV_2017/papers/Selvaraju_Grad-CAM_Visual_Explanations_ICCV_2017_paper.pdf)]
 - **Smooth Gradients** [[Paper](https://arxiv.org/pdf/1706.03825.pdf?source=post_page---------------------------)]
 - **Full-Gradients** [[Paper](https://proceedings.neurips.cc/paper/2019/file/80537a945c7aaa788ccfcdf1b99b5d8f-Paper.pdf)]
 - **Integrated Gradients (IG)** [[Paper](http://proceedings.mlr.press/v70/sundararajan17a/sundararajan17a.pdf)]
