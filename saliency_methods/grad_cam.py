@@ -91,7 +91,7 @@ class GradCAM():
         if sparse_labels is None:
             sparse_labels = out.data.max(1, keepdim=True)[1]
 
-        output_scalar = 0
+        output_scalar = out
         if self.exp_obj == 'prob':
             output_scalar = -1. * F.nll_loss(out, sparse_labels.flatten(), reduction='sum')
         elif self.exp_obj == 'logit':
