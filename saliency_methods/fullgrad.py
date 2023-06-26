@@ -9,9 +9,41 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from math import isclose
+import functools
+import operator
 
 from .tensor_extractor import FullGradExtractor
 DEFAULT_DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+
+def gather_nd(params, indices):
+    """
+    Args:
+        params: Tensor to index
+        indices: k-dimension tensor of integers.
+    Returns:
+        output: 1-dimensional tensor of elements of ``params``, where
+            output[i] = params[i][indices[i]]
+
+            params   indices   output
+
+            1 2       1 1       4
+            3 4       2 0 ----> 5
+            5 6       0 0       1
+    """
+    max_value = functools.reduce(operator.mul, list(params.size())) - 1
+    indices = indices.t().long()
+    ndim = indices.size(0)
+    idx = torch.zeros_like(indices[0]).long()
+    m = 1
+
+    for i in range(ndim)[::-1]:
+        idx += indices[i]*m
+        m *= params.size(i)
+
+    idx[idx < 0] = 0
+    idx[idx > max_value] = 0
+    return torch.take(params, idx)
 
 
 class FullGrad():
@@ -66,11 +98,16 @@ class FullGrad():
         image = image.requires_grad_()
         output = self.model(image)
 
-        # ---------------------------------------------
-        if self.exp_obj == 'logit':
-            batch_output = output
-        elif self.exp_obj == 'prob':
-            batch_output = torch.log_softmax(output, 1)
+        if self.exp_obj == 'prob':
+            batch_output = -1. * F.nll_loss(output, target_class.flatten(), reduction='sum')
+        elif self.exp_obj == 'logit':
+            sample_indices = torch.arange(0, output.size(0)).cuda()
+            indices_tensor = torch.cat([
+                sample_indices.unsqueeze(1),
+                target_class.unsqueeze(1)], dim=1)
+            output_scalar = gather_nd(output, indices_tensor)
+
+            batch_output = torch.sum(output_scalar)
         elif self.exp_obj == 'contrast':
             b_num, c_num = output.shape[0], output.shape[1]
             mask = torch.ones(b_num, c_num, dtype=torch.bool)
@@ -80,7 +117,10 @@ class FullGrad():
             weighted_neg_output = (neg_weight * neg_cls_output).sum(dim=1)
             pos_cls_output = output[torch.arange(b_num), target_class]
             output = pos_cls_output - weighted_neg_output
-            batch_output = output
+            output_scalar = output
+
+            batch_output = torch.sum(output_scalar)
+
         out = batch_output
         output_scalar = out
 

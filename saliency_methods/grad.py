@@ -73,11 +73,11 @@ class Gradients(object):
             weighted_neg_output = (neg_weight * neg_cls_output).sum(dim=1)
             pos_cls_output = output[torch.arange(b_num), sparse_labels]
             output = pos_cls_output - weighted_neg_output
-            batch_output = output
+            batch_output = output.unsqueeze(1)
 
         # should check that users pass in sparse labels
         # Only look at the user-specified label
-        if sparse_labels is not None and batch_output.size(1) > 1 and self.exp_obj != 'contrast':
+        if sparse_labels is not None and batch_output.size(1) > 1:
             sample_indices = torch.arange(0, batch_output.size(0)).to(DEFAULT_DEVICE)
             indices_tensor = torch.cat([
                 sample_indices.unsqueeze(1),
