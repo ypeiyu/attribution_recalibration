@@ -11,7 +11,7 @@ from torchvision import models
 from utils.settings import img_size
 from utils.preprocess import LSVRC_mean, LSVRC_std
 mean, std = LSVRC_mean, LSVRC_std
-from saliency_methods import RandomBaseline, Gradients, SmoothGrad, FullGrad, IntegratedGradients, ExpectedGradients, AGI, IntGradUniform, IntGradSG, IntGradSQ
+from saliency_methods import RandomBaseline, Gradients, SmoothGrad, FullGrad, IntegratedGradients, ExpectedGradients, AGI, IntGradUniform, IntGradSG, IntGradSQ, GradCAM
 from evaluator import Evaluator
 from networks.MLP import Model
 
@@ -93,12 +93,13 @@ def load_explainer(model, **kwargs):
         int_grad_sq = IntGradSQ(model, k=kwargs['k'], bg_size=kwargs['bg_size'], random_alpha=kwargs['random_alpha'],
                                 est_method=kwargs['est_method'], exp_obj=kwargs['exp_obj'])
         return int_grad_sq
+
     elif method_name == 'AGI':
-        k = kwargs['k']
-        top_k = kwargs['top_k']
-        cls_num = kwargs['cls_num']
-        agi = AGI(model, k=k, top_k=top_k, cls_num=cls_num)
+        agi = AGI(model, k=kwargs['k'], top_k=kwargs['top_k'], cls_num=kwargs['cls_num'])
         return agi
+    elif method_name == 'GradCAM':
+        grad_cam = GradCAM(model, exp_obj=kwargs['exp_obj'])
+        return grad_cam
 
     else:
         raise NotImplementedError('%s is not implemented.' % method_name)
@@ -226,6 +227,8 @@ def evaluate(method_name, model_name, dataset_name, metric, k=None, bg_size=None
                   'est_method': est_method, 'exp_obj': exp_obj},
         'IG_SQ': {'method_name': method_name, 'k': k, 'bg_size': bg_size, 'random_alpha': False,
                   'est_method': est_method, 'exp_obj': exp_obj},
+
+        'GradCAM': {'method_name': method_name, 'exp_obj': exp_obj},
     }
 
     explainer = load_explainer(model=model, **explainer_args[method_name])
@@ -244,7 +247,7 @@ def evaluate(method_name, model_name, dataset_name, metric, k=None, bg_size=None
             evaluator.DiffID(ratio_lst=[step * 0.1 for step in range(1, 10)])
 
     elif metric == 'visualize':
-        num_vis_samples = 500
+        num_vis_samples = 50
         f_name = 'exp_fig/' + method_name + '_' + model_name + '/'
         evaluator.visual_inspection(file_name=f_name, num_vis=num_vis_samples, method_name=method_name)
 
