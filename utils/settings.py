@@ -11,12 +11,12 @@ parser_choices = {
 }
 
 parser_default = {
-    'attr_method': 'IG_Uniform',
+    'attr_method': 'IG_SG',  # IG_Uniform
     'model': 'resnet34',
     'dataset': 'ImageNet',
-    'metric': 'DiffID',
+    'metric': 'visualize',
     'k': 5,
     'bg_size': 20,
     'est_method': 'vanilla',
-    'exp_obj': 'logit',
+    'exp_obj': 'contrast',
 }
