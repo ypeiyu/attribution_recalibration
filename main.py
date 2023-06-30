@@ -9,20 +9,13 @@ import torchvision.transforms as transforms
 
 from torchvision import models
 from utils.settings import img_size
-from utils.preprocess import LSVRC_mean, LSVRC_std
-mean, std = LSVRC_mean, LSVRC_std
+from utils.preprocess import mean_std_dict
 from saliency_methods import RandomBaseline, Gradients, SmoothGrad, FullGrad, IntegratedGradients, ExpectedGradients, AGI, IntGradUniform, IntGradSG, IntGradSQ, GradCAM
 from evaluator import Evaluator
 from networks.MLP import Model
 
 from torch.utils.data import DataLoader
 import torchvision
-
-cifar100_mean = (0.5070751592371323, 0.48654887331495095, 0.4409178433670343)
-cifar100_std = (0.2673342858792401, 0.2564384629170883, 0.27615047132568404)
-
-cifar10_mean = (0.4914, 0.4822, 0.4465)
-cifar10_std = (0.2471, 0.2435, 0.2616)
 
 
 from utils.settings import parser_choices, parser_default
@@ -49,7 +42,7 @@ parser.add_argument('-est_method', type=str,
                     choices=parser_choices['est_method'],
                     default=parser_default['est_method'])
 parser.add_argument('-exp_obj', type=str,
-                    choices=parser_choices['est_method'],
+                    choices=parser_choices['exp_obj'],
                     default=parser_default['exp_obj'])
 args = parser.parse_args()
 
@@ -108,6 +101,7 @@ def load_explainer(model, **kwargs):
 def load_dataset(dataset_name, test_batch_size):
     # ---------------------------- imagenet train ---------------------------
     if 'ImageNet' in dataset_name:
+        mean, std = mean_std_dict['imagenet']
         imagenet_train_dataset = datasets.ImageNet(
             root='datasets',
             split='train',
@@ -153,39 +147,43 @@ def load_dataset(dataset_name, test_batch_size):
         return mnist_tr_dataset, mnist_te_loader
     elif dataset_name == 'CIFAR-10':
         # -------------------------- CIFAR-10 dataset ----------------------------------------
+        mean, std = mean_std_dict['cifar10']
         cifar10_tr_dataset = datasets.CIFAR10('datasets/cifar10',
                                               train=True,
                                               transform=transforms.Compose([
                                                   # transforms.RandomCrop(32, padding=4, fill=0, padding_mode='constant'),
                                                   transforms.RandomHorizontalFlip(),
                                                   transforms.ToTensor(),
-                                                  transforms.Normalize(mean=cifar10_mean, std=cifar10_std),
+                                                  transforms.Normalize(mean=mean, std=std),
                                               ]),
                                               download=True)
         cifar10_te_dataset = datasets.CIFAR10('datasets/cifar10',
                                               train=False,
                                               transform=transforms.Compose([
                                                   transforms.ToTensor(),
-                                                  transforms.Normalize(mean=cifar10_mean, std=cifar10_std),
+                                                  transforms.Normalize(mean=mean, std=std),
                                               ]),
                                               download=True)
         cifar10_te_loader = DataLoader(cifar10_te_dataset, batch_size=test_batch_size, shuffle=False, num_workers=4)
         return cifar10_tr_dataset, cifar10_te_loader
     elif dataset_name == 'CIFAR-100':
+        mean, std = mean_std_dict['cifar100']
+
         cifar100_tr_dataset = datasets.CIFAR100('datasets/cifar100',
                                                 train=True,
                                                 transform=transforms.Compose([
                                                     # transforms.RandomCrop(32, padding=4, fill=0, padding_mode='constant'),
                                                     transforms.ToTensor(),
-                                                    transforms.Normalize(mean=cifar100_mean, std=cifar100_std),
+                                                    transforms.Normalize(mean=mean, std=std),
                                                 ]),
                                                 download=True)
         cifar100_te_dataset = datasets.CIFAR100('datasets/cifar100',
                                                 train=False,
                                                 transform=transforms.Compose([
                                                     transforms.ToTensor(),
-                                                    transforms.Normalize(mean=cifar100_mean, std=cifar100_std),
-                                                ]),                                                download=True)
+                                                    transforms.Normalize(mean=mean, std=std),
+                                                ]),
+                                                download=True)
         cifar100_te_loader = DataLoader(cifar100_te_dataset, batch_size=test_batch_size, shuffle=False, num_workers=4)
         return cifar100_tr_dataset, cifar100_te_loader
 
