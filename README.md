@@ -32,6 +32,8 @@ Due to its desirable theoretical properties, path integration is a widely used s
 - **Expected Gradients** [[Paper](https://openreview.net/pdf?id=rygPm64tDH)]
 - **Adversarial Gradient Integration** [[Paper](https://www.ijcai.org/proceedings/2021/0396.pdf)]
 - **Local Gradient Integration** [[Paper](https://scholar.google.com.au/citations?view_op=view_citation&hl=zh-CN&user=Xqmlj18AAAAJ&sortby=pubdate&citation_for_view=Xqmlj18AAAAJ:W5xh706n7nkC)]
+- **Class-Contrastive Back-Propagation Explanations** [[Paper](https://scholar.google.com.au/citations?view_op=view_citation&hl=zh-CN&user=Xqmlj18AAAAJ&sortby=pubdate&citation_for_view=Xqmlj18AAAAJ:W5xh706n7nkC)]
+- **Attribution Re-calibration**
 
 ## Re-calibrating attributions
 
