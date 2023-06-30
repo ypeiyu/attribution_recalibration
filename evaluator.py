@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import os
 from tqdm import tqdm
 
-from utils import undo_preprocess_input_function
+from utils import undo_preprocess
 from utils import visualize
 
 import functools
@@ -175,7 +175,7 @@ class Evaluator(object):
             if 'MLP' in file_name:
                 image = image.detach().cpu().numpy()
             else:
-                image = undo_preprocess_input_function(image).detach().cpu().numpy()
+                image = undo_preprocess(image).detach().cpu().numpy()
 
             if not os.path.exists(file_name):
                 os.mkdir(file_name)
