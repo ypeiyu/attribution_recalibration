@@ -87,31 +87,29 @@ class Evaluator(object):
             saliency_map = normalize_saliency_map(saliency_map.detach())
 
             self.model.eval()
-            perturb_img_batch = torch.zeros(*batch_image.shape).cuda()
             num_elements = batch_image[0].numel()
 
             for r_ind, ratio in enumerate(ratio_lst):
                 for is_del in [False, True]:
                     del_ratio = ratio
 
+                    flat_image = batch_image.view(batch_size, -1)
+                    flat_s_map = saliency_map.view(batch_size, -1)
+                    # order by attributions
+                    sorted_ind = torch.argsort(flat_s_map, dim=1, descending=is_del)
+                    # preserve pixels
+                    num_delete = int(num_elements * del_ratio)
+                    preserve_ind = sorted_ind[:, num_delete:]
+                    mask = torch.zeros_like(flat_image)
+                    mean_preserve_lst = []
                     for b_num in range(batch_size):
-                        image = batch_image.detach()[b_num]
-                        flat_s_map = saliency_map[b_num].view(-1)
-                        flat_image = image.view(-1)
-                        # order by attributions
-                        sorted_ind = torch.argsort(flat_s_map, descending=is_del)
-                        # preserve pixels
-                        num_delete = int(num_elements * del_ratio)
-                        preserve_ind = sorted_ind[num_delete:]
-                        mask = torch.zeros_like(flat_image, dtype=torch.int)
-                        mask[preserve_ind] = 1
-                        mean_preserve = torch.mean(flat_image[preserve_ind])
-                        perturb_img = flat_image * mask + mean_preserve * ~mask
-                        perturb_img = perturb_img.view(image.size())
+                        mask[b_num][preserve_ind[b_num]] = 1.
+                        mean_preserve_lst.append(torch.mean(flat_image[b_num][preserve_ind[b_num]]))
+                    mean_preserve = torch.stack(mean_preserve_lst).unsqueeze(1)
+                    perturb_img = mask*flat_image + (1-mask)*mean_preserve
+                    perturb_img = perturb_img.view(batch_image.size())
 
-                        perturb_img_batch[b_num] = perturb_img
-
-                    output_pert = self.model(perturb_img_batch).detach()
+                    output_pert = self.model(perturb_img).detach()
 
                     isd = int(is_del)
                     _, predicted_pert = torch.max(output_pert.data, 1)
