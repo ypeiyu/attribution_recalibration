@@ -4,6 +4,7 @@ import operator
 import torch
 from torch.autograd import grad
 import torch.nn.functional as F
+from utils import preprocess
 
 DEFAULT_DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -151,8 +152,7 @@ class IntegratedGradients(object):
         shape.insert(1, self.k)
 
         reference_tensor = torch.zeros(*input_tensor.shape).cuda().to(DEFAULT_DEVICE)
-        from utils import preprocess_input_function
-        reference_tensor = preprocess_input_function(reference_tensor)
+        reference_tensor = preprocess(reference_tensor)
         reference_tensor = reference_tensor.repeat([self.k, 1, 1, 1])
         reference_tensor = reference_tensor.view(shape)
 
