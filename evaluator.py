@@ -14,9 +14,9 @@ import functools
 import operator
 
 
-def normalize_saliency_map(saliency_map):
-    saliency_map = torch.sum(torch.abs(saliency_map), dim=1, keepdim=True)
-    # saliency_map = torch.abs(saliency_map)
+def normalize_saliency_map(saliency_map, absolute=True):
+    if absolute:
+        saliency_map = torch.sum(torch.abs(saliency_map), dim=1, keepdim=True)
 
     flat_s = saliency_map.view((saliency_map.size(0), -1))
     temp, _ = flat_s.min(1, keepdim=True)
@@ -25,7 +25,8 @@ def normalize_saliency_map(saliency_map):
     temp, _ = flat_s.max(1, keepdim=True)
     saliency_map = saliency_map / (temp.unsqueeze(1).unsqueeze(1) + 1e-10)
 
-    saliency_map = saliency_map.repeat(1, 3, 1, 1)
+    if absolute:
+        saliency_map = saliency_map.repeat(1, 3, 1, 1)
 
     return saliency_map
 
@@ -84,7 +85,7 @@ class Evaluator(object):
                 saliency_map = self.explainer.shap_values(batch_image, sparse_labels=target)
 
             # -------------------------------- saliency map normalization -----------------------------------------
-            saliency_map = normalize_saliency_map(saliency_map.detach())
+            saliency_map = normalize_saliency_map(saliency_map)
 
             self.model.eval()
             num_elements = batch_image[0].numel()
@@ -194,7 +195,7 @@ class Evaluator(object):
 
             saliency_map = self.explainer.shap_values(image, sparse_labels=target)
             saliency_map = saliency_map.data.cpu().numpy()
-            saliency_map = normalize_saliency_map(saliency_map.detach())
+            saliency_map = normalize_saliency_map(saliency_map)
 
             saliency_norm_lst.append(saliency_map)
         return np.array(saliency_norm_lst)
