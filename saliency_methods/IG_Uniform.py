@@ -1,6 +1,7 @@
 import torch
 import torch.utils.data
 from .IG_SG import IntGradSG
+from utils import preprocess
 
 
 class IntGradUniform(IntGradSG):
@@ -20,7 +21,6 @@ class IntGradUniform(IntGradSG):
         shape = list(input_tensor.shape)
         shape.insert(1, self.bg_size)
 
-        from utils import preprocess
         ref_lst = [preprocess(torch.rand(*input_tensor.shape)) for _ in range(self.bg_size)]
         ref = torch.cat(ref_lst)
         reference_tensor = ref.view(*shape).cuda()
