@@ -39,16 +39,21 @@ def gather_nd(params, indices):
     return torch.take(params, idx)
 
 
+cls_num_dict = {'imagenet':1000, 'cifar10':10, 'cifar100':100}
+
+
 class AGI(object):
-    def __init__(self, model, k, top_k, cls_num, eps=0.05, scale_by_input=False, est_method='vanilla', exp_obj='logit'):
+    def __init__(self, model, k, top_k, eps=0.05, scale_by_input=False, est_method='vanilla', exp_obj='logit',
+                 dataset_name='imagenet'):
         self.model = model
-        self.cls_num = cls_num - 1
+        self.cls_num = cls_num_dict[dataset_name] - 1
         self.eps = eps
         self.k = k
         self.top_k = top_k
         self.scale_by_input = scale_by_input
         self.est_method = est_method
         self.exp_obj = exp_obj
+        self.dataset_name = dataset_name
 
     def select_id(self, label):
         while True:
@@ -59,29 +64,25 @@ class AGI(object):
                 continue
         return torch.as_tensor(random.sample(list(range(0, self.cls_num - 1)), self.top_k)).view([1, -1])
 
-    def fgsm_step(self, image, epsilon, data_grad_label, data_grad_pred):
+    def fgsm_step(self, image, epsilon, data_grad_label):
         # generate the perturbed image based on steepest descent
         delta = epsilon * data_grad_label.sign()
 
         # + delta because we are ascending
         perturbed_image = image + delta
-        perturbed_rect = torch.clamp(perturbed_image, min=0, max=1)
+        perturbed_image = torch.clamp(perturbed_image, min=0, max=1)
 
-        delta = perturbed_rect - image
-        delta = - data_grad_pred * delta
+        delta = image - perturbed_image
+        # delta = data_grad_label
 
-        if self.est_method == 'valid_ip':
-            valid_num = torch.where(delta >= 0., 1., 0.)
-            valid_delta = torch.where(delta >= 0., delta, torch.zeros(*delta.shape).cuda())
-            return perturbed_rect, valid_delta, valid_num
-        else:
-            return perturbed_image, delta
+        return perturbed_image, delta
 
-    def pgd_step(self, image, epsilon, model, init_pred, targeted, max_iter):
+    def pgd_step(self, image, epsilon, model, targeted, max_iter):
         """target here is the targeted class to be perturbed to"""
         perturbed_image = image.clone()
         c_delta = 0  # cumulative delta
-        sign = 0
+        c_sign = 0
+        curr_grad = 0
         for i in range(max_iter):
             # requires grads
             perturbed_image.requires_grad = True
@@ -101,43 +102,32 @@ class AGI(object):
                 create_graph=True)
             data_grad_label = model_grads[0].detach().data
 
-            sample_indices = torch.arange(0, output.size(0)).cuda()
-            indices_tensor = torch.cat([
-                sample_indices.unsqueeze(1),
-                init_pred.unsqueeze(1)], dim=1)
-            pred_output = gather_nd(output, indices_tensor)
-            model.zero_grad()
-            model_grads = grad(
-                outputs=pred_output,
-                inputs=perturbed_image,
-                grad_outputs=torch.ones_like(pred_output).cuda(),
-                create_graph=True)
-            data_grad_pred = model_grads[0].detach().data
-
             if self.est_method == 'valid_ip':
-                perturbed_image, delta, eff_sign = self.fgsm_step(image, epsilon, data_grad_label, data_grad_pred)
-                sign += eff_sign
-                c_delta += delta
+                perturbed_image, delta, valid_num = self.fgsm_step(image, epsilon, data_grad_label)
+                mul_grad_delta = curr_grad * delta
+                valid_num = torch.where(mul_grad_delta >= 0., 1., 0.)
+                mul_grad_delta = torch.where(mul_grad_delta >= 0., mul_grad_delta, torch.zeros(*mul_grad_delta.shape).cuda())
+                c_sign += valid_num
+                c_delta += mul_grad_delta
             else:
-                perturbed_image, delta = self.fgsm_step(image, epsilon, data_grad_label, data_grad_pred)
+                perturbed_image, delta = self.fgsm_step(image, epsilon, data_grad_label)
+                delta = curr_grad * delta
+                c_delta += delta
+            curr_grad = data_grad_label
 
         if self.est_method == 'valid_ip':
-            c_delta = c_delta / torch.where(sign == 0., 1., sign)
-        else:
-            c_delta = c_delta
+            c_delta = c_delta / torch.where(c_sign == 0., 1., c_sign)
 
-        return c_delta
+        return c_delta * (image-perturbed_image)
 
     def shap_values(self, input_tensor, sparse_labels=None):
 
         # Forward pass the data through the model
-        output = self.model(input_tensor)
         self.model.eval()
-        init_pred = output.max(1, keepdim=True)[1].squeeze(1)  # get the index of the max log-probability
-        # init_pred = sparse_labels
 
         # initialize the step_grad towards all target false classes
         step_grad = 0
+        valid_ref_num = 0
         top_ids_lst = []
         for bth in range(input_tensor.shape[0]):
             top_ids_lst.append(self.select_id(sparse_labels[bth]))  # only for predefined ids
@@ -145,28 +135,17 @@ class AGI(object):
 
         for l in range(top_ids.shape[1]):
             targeted = top_ids[:, l].cuda()
-            delta = self.pgd_step(undo_preprocess(input_tensor), self.eps, self.model, init_pred, targeted, self.k)
+            delta = self.pgd_step(undo_preprocess(input_tensor, self.dataset_name), self.eps, self.model, targeted, self.k)
 
-            if self.est_method == 'valid_ip':
-                delta = delta / torch.where(delta == 0., 1., sign)
+            if self.est_method == 'valid_ref':
+                ref_mask = torch.where(delta >= 0., 1., 0.)
+                delta = delta * ref_mask
+                valid_ref_num += ref_mask
                 step_grad += delta
-                attribution = step_grad
-            elif self.est_method == 'valid_ref':
-                samples_delta = self._get_samples_delta(input_tensor, reference_tensor)
-                grad_tensor = self._get_grads(samples_input, sparse_labels)
-                zeros = torch.zeros(grad_tensor.shape).cuda()
-                ones = torch.ones(grad_tensor.shape).cuda()
-
-                grad_tensor = delta
-                mult_grads = grad_tensor * samples_delta
-                sign = torch.where(mult_grads >= 0., ones, zeros)
-                mult_grads = torch.pow(mult_grads, 2.) * sign
-
-                counts = torch.sum(sign, dim=1)
-                mult_grads = mult_grads.sum(1) / torch.where(counts == 0., ones[:, 0], counts)
-                attribution = mult_grads
             else:
                 step_grad += delta
-                attribution = step_grad
 
-        return attribution
+        if self.est_method == 'valid_ref':
+            step_grad /= torch.where(valid_ref_num == 0., torch.ones(valid_ref_num.shape).cuda(), valid_ref_num)
+
+        return step_grad
