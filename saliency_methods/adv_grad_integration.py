@@ -59,16 +59,16 @@ class AGI(object):
                 continue
         return torch.as_tensor(random.sample(list(range(0, self.cls_num - 1)), self.top_k)).view([1, -1])
 
-    def fgsm_step(self, image, epsilon, data_grad_adv, data_grad_lab):
+    def fgsm_step(self, image, epsilon, data_grad_label, data_grad_pred):
         # generate the perturbed image based on steepest descent
-        delta = epsilon * data_grad_adv.sign()
+        delta = epsilon * data_grad_label.sign()
 
         # + delta because we are ascending
         perturbed_image = image + delta
         perturbed_rect = torch.clamp(perturbed_image, min=0, max=1)
 
         delta = perturbed_rect - image
-        delta = - data_grad_lab * delta
+        delta = - data_grad_pred * delta
 
         if self.est_method == 'valid_ip':
             valid_num = torch.where(delta >= 0., 1., 0.)
@@ -86,44 +86,40 @@ class AGI(object):
             # requires grads
             perturbed_image.requires_grad = True
             output = model(perturbed_image)
-            # if attack is successful, then break
-            # pred = output.max(1, keepdim=True)[1]  # get the index of the max log-probability
-            # if False not in (pred == targeted.view(-1, 1)):
-            #     break
-
             output = F.softmax(output, dim=1)
+
             sample_indices = torch.arange(0, output.size(0)).cuda()
             indices_tensor = torch.cat([
                 sample_indices.unsqueeze(1),
                 targeted.unsqueeze(1)], dim=1)
-            loss = gather_nd(output, indices_tensor)
+            target_output = gather_nd(output, indices_tensor)
             model.zero_grad()
             model_grads = grad(
-                outputs=loss,
+                outputs=target_output,
                 inputs=perturbed_image,
-                grad_outputs=torch.ones_like(loss).cuda(),
+                grad_outputs=torch.ones_like(target_output).cuda(),
                 create_graph=True)
-            data_grad_adv = model_grads[0].detach().data
+            data_grad_label = model_grads[0].detach().data
 
             sample_indices = torch.arange(0, output.size(0)).cuda()
             indices_tensor = torch.cat([
                 sample_indices.unsqueeze(1),
                 init_pred.unsqueeze(1)], dim=1)
-            loss = gather_nd(output, indices_tensor)
+            pred_output = gather_nd(output, indices_tensor)
             model.zero_grad()
             model_grads = grad(
-                outputs=loss,
+                outputs=pred_output,
                 inputs=perturbed_image,
-                grad_outputs=torch.ones_like(loss).cuda(),
+                grad_outputs=torch.ones_like(pred_output).cuda(),
                 create_graph=True)
-            data_grad_lab = model_grads[0].detach().data
+            data_grad_pred = model_grads[0].detach().data
 
             if self.est_method == 'valid_ip':
-                perturbed_image, delta, eff_sign = self.fgsm_step(image, epsilon, data_grad_adv, data_grad_lab)
+                perturbed_image, delta, eff_sign = self.fgsm_step(image, epsilon, data_grad_label, data_grad_pred)
                 sign += eff_sign
                 c_delta += delta
             else:
-                perturbed_image, delta = self.fgsm_step(image, epsilon, data_grad_adv, data_grad_lab)
+                perturbed_image, delta = self.fgsm_step(image, epsilon, data_grad_label, data_grad_pred)
 
         if self.est_method == 'valid_ip':
             c_delta = c_delta / torch.where(sign == 0., 1., sign)

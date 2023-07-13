@@ -3,7 +3,6 @@ import operator
 import torch
 from torch.autograd import grad
 import torch.nn.functional as F
-from utils.preprocess import preprocess, undo_preprocess
 
 DEFAULT_DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -39,7 +38,7 @@ def gather_nd(params, indices):
 
 
 class IntGradSG(object):
-    def __init__(self, model, k, bg_size, random_alpha=False, est_method='vanilla', exp_obj='logit'):
+    def __init__(self, model, k, bg_size, random_alpha=False, est_method='vanilla', exp_obj='logit', dataset_name='imagenet'):
         self.model = model
         self.model.eval()
         self.k = k
@@ -47,6 +46,7 @@ class IntGradSG(object):
         self.random_alpha = random_alpha
         self.est_method = est_method
         self.exp_obj = exp_obj
+        self.dataset_name = dataset_name
 
     def _get_samples_input(self, input_tensor, reference_tensor):
         '''
@@ -159,15 +159,15 @@ class IntGradSG(object):
         shape = list(input_tensor.shape)
         shape.insert(1, self.bg_size)
 
-        input_tensor = undo_preprocess(input_tensor)
+        # input_tensor = undo_preprocess(input_tensor)
         std_factor = 0.15
         std_dev = std_factor * (input_tensor.max().item() - input_tensor.min().item())
         ref_lst = [torch.normal(mean=torch.zeros_like(input_tensor), std=std_dev) for _ in range(self.bg_size)]
         reference_tensor = torch.stack(ref_lst, dim=0).cuda()
         reference_tensor += input_tensor.unsqueeze(0)
         reference_tensor = torch.clamp(reference_tensor, min=0., max=1.)
-        reference_tensor = preprocess(reference_tensor.reshape(-1, shape[-3], shape[-2], shape[-1]))
-        input_tensor = preprocess(input_tensor)
+        # reference_tensor = preprocess(reference_tensor.reshape(-1, shape[-3], shape[-2], shape[-1]))
+        # input_tensor = preprocess(input_tensor)
         reference_tensor = reference_tensor.view(*shape)
         multi_ref_tensor = reference_tensor.repeat(1, self.k, 1, 1, 1)
 
@@ -178,7 +178,7 @@ class IntGradSG(object):
         input_tensor, samples_input, reference_tensor = self.chew_input(input_tensor)
 
         if self.est_method == 'valid_ip':
-            samples_delta = self._get_samples_delta(input_tensor, samples_input)  # samples_input, multi_ref_tensor input_tensor, samples_input
+            samples_delta = self._get_samples_delta(input_tensor, samples_input)
             grad_tensor = self._get_grads(samples_input, sparse_labels)
             grad_tensor = grad_tensor.reshape(samples_delta.shape)
             mult_grads = grad_tensor * samples_delta

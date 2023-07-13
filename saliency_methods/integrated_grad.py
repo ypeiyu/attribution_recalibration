@@ -40,11 +40,12 @@ def gather_nd(params, indices):
 
 
 class IntegratedGradients(object):
-    def __init__(self, model, k=10, exp_obj='logit'):
+    def __init__(self, model, k=10, exp_obj='logit', dataset_name='imagenet'):
         self.model = model
         self.model.eval()
         self.k = k
         self.exp_obj = exp_obj
+        self.dataset_name = dataset_name
 
     def _get_samples_input(self, input_tensor, reference_tensor):
         '''
@@ -152,7 +153,7 @@ class IntegratedGradients(object):
         shape.insert(1, self.k)
 
         reference_tensor = torch.zeros(*input_tensor.shape).cuda().to(DEFAULT_DEVICE)
-        reference_tensor = preprocess(reference_tensor)
+        reference_tensor = preprocess(reference_tensor, self.dataset_name)
         reference_tensor = reference_tensor.repeat([self.k, 1, 1, 1])
         reference_tensor = reference_tensor.view(shape)
 

@@ -21,7 +21,7 @@ class IntGradUniform(IntGradSG):
         shape = list(input_tensor.shape)
         shape.insert(1, self.bg_size)
 
-        ref_lst = [preprocess(torch.rand(*input_tensor.shape)) for _ in range(self.bg_size)]
+        ref_lst = [preprocess(torch.rand(*input_tensor.shape), self.dataset_name) for _ in range(self.bg_size)]
         ref = torch.cat(ref_lst)
         reference_tensor = ref.view(*shape).cuda()
         multi_ref_tensor = reference_tensor.repeat(1, self.k, 1, 1, 1)
