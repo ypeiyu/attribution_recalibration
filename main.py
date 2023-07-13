@@ -10,7 +10,8 @@ import torchvision.transforms as transforms
 from torchvision import models
 from utils.settings import img_size
 from utils.preprocess import mean_std_dict
-from saliency_methods import RandomBaseline, Gradients, SmoothGrad, FullGrad, IntegratedGradients, ExpectedGradients, AGI, IntGradUniform, IntGradSG, IntGradSQ, GradCAM
+from saliency_methods import RandomBaseline, Gradients, SmoothGrad, FullGrad, IntegratedGradients, ExpectedGradients,\
+    AGI, IntGradUniform, IntGradSG, IntGradSQ, GradCAM
 from evaluator import Evaluator
 from networks.MLP import Model
 
@@ -22,6 +23,8 @@ from utils.settings import parser_choices, parser_default
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-gpuid', nargs=1, type=str, default='0')
+parser.add_argument('-batch_size', type=int,
+                    default=parser_default['batch_size'])
 parser.add_argument('-attr_method', type=str,
                     choices=parser_choices['attr_method'],
                     default=parser_default['attr_method'])
@@ -57,7 +60,7 @@ def load_explainer(model, **kwargs):
         input_grad = Gradients(model, exp_obj=kwargs['exp_obj'])
         return input_grad
     elif method_name == 'FullGrad':
-        full_grad = FullGrad(model, exp_obj=kwargs['exp_obj'], im_size=(3, 224, 224))
+        full_grad = FullGrad(model, exp_obj=kwargs['exp_obj'], im_size=kwargs['im_size'])  # (3, 224, 224)
         return full_grad
     elif method_name == 'SmoothGrad':
         smooth_grad = SmoothGrad(model, bg_size=kwargs['bg_size'], exp_obj=kwargs['exp_obj'], std_spread=0.15)
@@ -65,7 +68,7 @@ def load_explainer(model, **kwargs):
 
     # -------------------- integration based -------------------------
     elif method_name == 'IntGrad':
-        integrated_grad = IntegratedGradients(model, k=kwargs['k'], exp_obj=kwargs['exp_obj'])
+        integrated_grad = IntegratedGradients(model, k=kwargs['k'], exp_obj=kwargs['exp_obj'], dataset_name=kwargs['dataset_name'])
         return integrated_grad
     elif method_name == 'ExpGrad':
         expected_grad = ExpectedGradients(model, k=kwargs['k'], bg_size=kwargs['bg_size'], bg_dataset=kwargs['bg_dataset'],
@@ -76,7 +79,7 @@ def load_explainer(model, **kwargs):
     # -------------------- IG based -------------------------
     elif method_name == 'IG_Uniform':
         int_grad_uni = IntGradUniform(model, k=kwargs['k'], bg_size=kwargs['bg_size'], random_alpha=kwargs['random_alpha'],
-                                      est_method=kwargs['est_method'], exp_obj=kwargs['exp_obj'])
+                                      est_method=kwargs['est_method'], exp_obj=kwargs['exp_obj'], dataset_name=kwargs['dataset_name'])
         return int_grad_uni
     elif method_name == 'IG_SG':
         int_grad_sg = IntGradSG(model, k=kwargs['k'], bg_size=kwargs['bg_size'], random_alpha=kwargs['random_alpha'],
@@ -88,7 +91,7 @@ def load_explainer(model, **kwargs):
         return int_grad_sq
 
     elif method_name == 'AGI':
-        agi = AGI(model, k=kwargs['k'], top_k=kwargs['top_k'], cls_num=kwargs['cls_num'])
+        agi = AGI(model, k=kwargs['k'], top_k=kwargs['top_k'], dataset_name=kwargs['dataset_name'])
         return agi
     elif method_name == 'GradCAM':
         grad_cam = GradCAM(model, exp_obj=kwargs['exp_obj'])
@@ -100,8 +103,8 @@ def load_explainer(model, **kwargs):
 
 def load_dataset(dataset_name, test_batch_size):
     # ---------------------------- imagenet train ---------------------------
-    if 'ImageNet' in dataset_name:
-        mean, std = mean_std_dict['imagenet']
+    if 'imagenet' in dataset_name:
+        mean, std = mean_std_dict[dataset_name]
         imagenet_train_dataset = datasets.ImageNet(
             root='datasets',
             split='train',
@@ -110,23 +113,23 @@ def load_dataset(dataset_name, test_batch_size):
                 transforms.ToTensor(),
                 transforms.Normalize(mean=mean, std=std),
             ]))
-        if dataset_name == 'ImageNet':
-            # ---------------------------- imagenet eval ---------------------------
-            imagenet_val_dataset = datasets.ImageNet(
-                root='datasets',
-                split='val',
-                transform=transforms.Compose([
-                    transforms.Resize(size=(img_size, img_size)),
-                    transforms.ToTensor(),
-                    transforms.Normalize(mean=mean, std=std),
-                ]))
+
+        # ---------------------------- imagenet eval ---------------------------
+        imagenet_val_dataset = datasets.ImageNet(
+            root='datasets',
+            split='val',
+            transform=transforms.Compose([
+                transforms.Resize(size=(img_size, img_size)),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=mean, std=std),
+            ]))
 
         imagenet_val_loader = torch.utils.data.DataLoader(
             imagenet_val_dataset, batch_size=test_batch_size,
             shuffle=False, num_workers=4, pin_memory=False)
 
         return imagenet_train_dataset, imagenet_val_loader
-    elif dataset_name == 'MNIST':
+    elif dataset_name == 'mnist':
         # -------------------------- MNIST dataset ----------------------------------------
         data_pth = 'datasets/mnist'
         mnist_tr_dataset = torchvision.datasets.MNIST(data_pth,
@@ -145,13 +148,12 @@ def load_dataset(dataset_name, test_batch_size):
         mnist_te_loader = DataLoader(mnist_te_dataset, batch_size=test_batch_size, shuffle=False, num_workers=4)
 
         return mnist_tr_dataset, mnist_te_loader
-    elif dataset_name == 'CIFAR-10':
+    elif dataset_name == 'cifar10':
         # -------------------------- CIFAR-10 dataset ----------------------------------------
-        mean, std = mean_std_dict['cifar10']
+        mean, std = mean_std_dict[dataset_name]
         cifar10_tr_dataset = datasets.CIFAR10('datasets/cifar10',
                                               train=True,
                                               transform=transforms.Compose([
-                                                  # transforms.RandomCrop(32, padding=4, fill=0, padding_mode='constant'),
                                                   transforms.RandomHorizontalFlip(),
                                                   transforms.ToTensor(),
                                                   transforms.Normalize(mean=mean, std=std),
@@ -166,13 +168,12 @@ def load_dataset(dataset_name, test_batch_size):
                                               download=True)
         cifar10_te_loader = DataLoader(cifar10_te_dataset, batch_size=test_batch_size, shuffle=False, num_workers=4)
         return cifar10_tr_dataset, cifar10_te_loader
-    elif dataset_name == 'CIFAR-100':
-        mean, std = mean_std_dict['cifar100']
+    elif dataset_name == 'cifar100':
+        mean, std = mean_std_dict[dataset_name]
 
         cifar100_tr_dataset = datasets.CIFAR100('datasets/cifar100',
                                                 train=True,
                                                 transform=transforms.Compose([
-                                                    # transforms.RandomCrop(32, padding=4, fill=0, padding_mode='constant'),
                                                     transforms.ToTensor(),
                                                     transforms.Normalize(mean=mean, std=std),
                                                 ]),
@@ -204,7 +205,7 @@ def evaluate(method_name, model_name, dataset_name, metric, k=None, bg_size=None
     model.eval()
 
     # =================== load train dataset & test loader ========================
-    test_bth = 32
+    test_bth = args.batch_size
 
     train_dataset, test_loader = load_dataset(dataset_name=dataset_name, test_batch_size=test_bth)
 
@@ -212,21 +213,22 @@ def evaluate(method_name, model_name, dataset_name, metric, k=None, bg_size=None
     explainer_args = {
         'Random': {},
         'InputGrad': {'method_name': method_name, 'exp_obj': exp_obj},
+        'GradCAM': {'method_name': method_name, 'exp_obj': exp_obj},
+
         'FullGrad': {'method_name': method_name, 'exp_obj': exp_obj},
         'SmoothGrad': {'method_name': method_name, 'bg_size':bg_size, 'exp_obj': exp_obj},
 
-        'IntGrad': {'method_name': method_name, 'k': k, 'exp_obj': exp_obj},
+        'IntGrad': {'method_name': method_name, 'k': k, 'exp_obj': exp_obj, 'dataset_name': dataset_name},
         'ExpGrad': {'method_name': method_name, 'k': k, 'bg_size': bg_size, 'bg_dataset': train_dataset,
                     'bg_batch_size': test_bth, 'random_alpha': True, 'est_method': est_method, 'exp_obj': exp_obj},
 
         'IG_Uniform': {'method_name': method_name, 'k': k, 'bg_size': bg_size, 'random_alpha': False,
-                       'est_method': est_method, 'exp_obj': exp_obj},
+                       'est_method': est_method, 'exp_obj': exp_obj, 'dataset_name': dataset_name},
         'IG_SG': {'method_name': method_name, 'k': k, 'bg_size': bg_size, 'random_alpha': False,
                   'est_method': est_method, 'exp_obj': exp_obj},
         'IG_SQ': {'method_name': method_name, 'k': k, 'bg_size': bg_size, 'random_alpha': False,
                   'est_method': est_method, 'exp_obj': exp_obj},
-
-        'GradCAM': {'method_name': method_name, 'exp_obj': exp_obj},
+        'AGI': {'method_name': method_name, 'k': k, 'top_k': bg_size, 'dataset_name': dataset_name},
     }
 
     explainer = load_explainer(model=model, **explainer_args[method_name])
@@ -259,7 +261,7 @@ def evaluate(method_name, model_name, dataset_name, metric, k=None, bg_size=None
                 evaluator.sensitivity_n(baseline_name=b_name, ratio_lst=ratio_lst, post_hoc=post_hoc)
 
     elif metric == 'sanity_check':
-        if dataset_name == 'MNIST':
+        if dataset_name == 'mnist':
 
             saliency_map_lst = []
             for model_name in ['checkpoint_MNIST_MLP_best.pth', 'checkpoint_MNIST_MLP_Permuted_best.pth']:
