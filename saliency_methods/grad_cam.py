@@ -100,7 +100,6 @@ class GradCAM():
                 sample_indices.unsqueeze(1),
                 sparse_labels.unsqueeze(1)], dim=1)
             output_scalar = gather_nd(out, indices_tensor)
-
             output_scalar = torch.sum(output_scalar)
         elif self.exp_obj == 'contrast':
             b_num, c_num = out.shape[0], out.shape[1]

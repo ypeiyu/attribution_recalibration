@@ -87,13 +87,30 @@ class AGI(object):
             # requires grads
             perturbed_image.requires_grad = True
             output = model(perturbed_image)
-            output = F.softmax(output, dim=1)
+            batch_output = F.softmax(output, dim=1)
 
-            sample_indices = torch.arange(0, output.size(0)).cuda()
-            indices_tensor = torch.cat([
-                sample_indices.unsqueeze(1),
-                targeted.unsqueeze(1)], dim=1)
-            target_output = gather_nd(output, indices_tensor)
+            if self.exp_obj == 'logit':
+                batch_output = batch_output
+            elif self.exp_obj == 'prob':
+                batch_output = torch.log_softmax(output, 1)
+            elif self.exp_obj == 'contrast':
+                b_num, c_num = output.shape[0], output.shape[1]
+                mask = torch.ones(b_num, c_num, dtype=torch.bool)
+                mask[torch.arange(b_num), targeted] = False
+                neg_cls_output = output[mask].reshape(b_num, c_num - 1)
+                neg_weight = F.softmax(neg_cls_output, dim=1)
+                weighted_neg_output = (neg_weight * neg_cls_output).sum(dim=1)
+                pos_cls_output = output[torch.arange(b_num), targeted]
+                output = pos_cls_output - weighted_neg_output
+                batch_output = output.unsqueeze(1)
+
+            if targeted is not None and batch_output.size(1) > 1:
+                sample_indices = torch.arange(0, batch_output.size(0)).cuda()
+                indices_tensor = torch.cat([
+                    sample_indices.unsqueeze(1),
+                    targeted.unsqueeze(1)], dim=1)
+                target_output = gather_nd(batch_output, indices_tensor)
+
             model.zero_grad()
             model_grads = grad(
                 outputs=target_output,

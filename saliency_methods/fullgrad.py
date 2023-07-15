@@ -77,7 +77,7 @@ class FullGrad():
         raw_output = self.model(input)
 
         # Compute full-gradients and add them up
-        input_grad, bias_grad = self.fullGradientDecompose(input, target_class=None)
+        input_grad, bias_grad = self.fullGradientDecompose(input, target_class=None, check=True)
 
         fullgradient_sum = (input_grad * input).sum()
         for i in range(len(bias_grad)):
@@ -89,7 +89,7 @@ class FullGrad():
         assert isclose(raw_output.max().item(), fullgradient_sum.item(), rel_tol=1e-4), err_string + err_message
         print('Completeness test passed for FullGrad.')
 
-    def fullGradientDecompose(self, image, target_class=None):
+    def fullGradientDecompose(self, image, target_class=None, check=False):
         """
         Compute full-gradient decomposition for an image
         """
@@ -98,7 +98,10 @@ class FullGrad():
         image = image.requires_grad_()
         output = self.model(image)
 
-        if self.exp_obj == 'prob':
+        if target_class is None:
+            target_class = output.data.max(1, keepdim=False)[1]
+
+        if self.exp_obj == 'prob' or check is True:
             batch_output = -1. * F.nll_loss(output, target_class.flatten(), reduction='sum')
         elif self.exp_obj == 'logit':
             sample_indices = torch.arange(0, output.size(0)).cuda()
@@ -106,8 +109,8 @@ class FullGrad():
                 sample_indices.unsqueeze(1),
                 target_class.unsqueeze(1)], dim=1)
             output_scalar = gather_nd(output, indices_tensor)
-
             batch_output = torch.sum(output_scalar)
+
         elif self.exp_obj == 'contrast':
             b_num, c_num = output.shape[0], output.shape[1]
             mask = torch.ones(b_num, c_num, dtype=torch.bool)
@@ -118,7 +121,6 @@ class FullGrad():
             pos_cls_output = output[torch.arange(b_num), target_class]
             output = pos_cls_output - weighted_neg_output
             output_scalar = output
-
             batch_output = torch.sum(output_scalar)
 
         out = batch_output
@@ -137,7 +139,7 @@ class FullGrad():
 
         for i in range(L):
 
-            # feature gradients are indexed backwards 
+            # feature gradients are indexed backwards
             # because of backprop
             g = feature_gradients[L-1-i]
 
@@ -145,7 +147,7 @@ class FullGrad():
             bias_size = [1] * len(g.size())
             bias_size[1] = self.biases[i].size(0)
             b = self.biases[i].view(tuple(bias_size))
-            
+
             bias_times_gradients.append(g * b.expand_as(g))
 
         return input_gradient, bias_times_gradients
@@ -181,7 +183,7 @@ class FullGrad():
         for i in range(len(bias_grad)):
 
             # Select only Conv layers
-            if len(bias_grad[i].size()) == len(im_size): 
+            if len(bias_grad[i].size()) == len(im_size):
                 temp = self._postProcess(bias_grad[i])
                 gradient = F.interpolate(temp, size=(im_size[2], im_size[3]), mode='bilinear', align_corners=True)
                 cam += gradient.sum(1, keepdim=True)

@@ -53,7 +53,7 @@ class SmoothGrad():
             pos_cls_output = output[torch.arange(b_num), target_class]
             output = pos_cls_output - weighted_neg_output
             batch_output = output
-        out = batch_output
+        out = batch_output.sum()
         loss = out
 
         # ---------------------------------------------
