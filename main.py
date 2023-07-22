@@ -8,7 +8,7 @@ import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 
 from torchvision import models
-from utils.settings import img_size
+from utils.settings import img_size_dict
 from utils.preprocess import mean_std_dict
 from saliency_methods import RandomBaseline, Gradients, SmoothGrad, FullGrad, IntegratedGradients, ExpectedGradients,\
     AGI, IntGradUniform, IntGradSG, IntGradSQ, GradCAM
@@ -60,7 +60,8 @@ def load_explainer(model, **kwargs):
         input_grad = Gradients(model, exp_obj=kwargs['exp_obj'])
         return input_grad
     elif method_name == 'FullGrad':
-        full_grad = FullGrad(model, exp_obj=kwargs['exp_obj'], im_size=kwargs['im_size'])  # (3, 224, 224)
+        im_size = img_size_dict[kwargs['dataset_name']]
+        full_grad = FullGrad(model, exp_obj=kwargs['exp_obj'], im_size=im_size)
         return full_grad
     elif method_name == 'SmoothGrad':
         smooth_grad = SmoothGrad(model, bg_size=kwargs['bg_size'], exp_obj=kwargs['exp_obj'], std_spread=0.15)
@@ -91,7 +92,8 @@ def load_explainer(model, **kwargs):
         return int_grad_sq
 
     elif method_name == 'AGI':
-        agi = AGI(model, k=kwargs['k'], top_k=kwargs['top_k'], dataset_name=kwargs['dataset_name'])
+        agi = AGI(model, k=kwargs['k'], top_k=kwargs['top_k'], est_method=kwargs['est_method'],
+                  exp_obj=kwargs['exp_obj'], dataset_name=kwargs['dataset_name'])
         return agi
     elif method_name == 'GradCAM':
         grad_cam = GradCAM(model, exp_obj=kwargs['exp_obj'])
@@ -104,6 +106,7 @@ def load_explainer(model, **kwargs):
 def load_dataset(dataset_name, test_batch_size):
     # ---------------------------- imagenet train ---------------------------
     if 'imagenet' in dataset_name:
+        img_size = img_size_dict[dataset_name][1]
         mean, std = mean_std_dict[dataset_name]
         imagenet_train_dataset = datasets.ImageNet(
             root='datasets',
@@ -211,11 +214,11 @@ def evaluate(method_name, model_name, dataset_name, metric, k=None, bg_size=None
 
     # =================== load explainer ========================
     explainer_args = {
-        'Random': {},
+        'Random': {'method_name': method_name},
         'InputGrad': {'method_name': method_name, 'exp_obj': exp_obj},
         'GradCAM': {'method_name': method_name, 'exp_obj': exp_obj},
 
-        'FullGrad': {'method_name': method_name, 'exp_obj': exp_obj},
+        'FullGrad': {'method_name': method_name, 'exp_obj': exp_obj, 'dataset_name': dataset_name},
         'SmoothGrad': {'method_name': method_name, 'bg_size':bg_size, 'exp_obj': exp_obj},
 
         'IntGrad': {'method_name': method_name, 'k': k, 'exp_obj': exp_obj, 'dataset_name': dataset_name},
@@ -228,7 +231,8 @@ def evaluate(method_name, model_name, dataset_name, metric, k=None, bg_size=None
                   'est_method': est_method, 'exp_obj': exp_obj},
         'IG_SQ': {'method_name': method_name, 'k': k, 'bg_size': bg_size, 'random_alpha': False,
                   'est_method': est_method, 'exp_obj': exp_obj},
-        'AGI': {'method_name': method_name, 'k': k, 'top_k': bg_size, 'dataset_name': dataset_name},
+        'AGI': {'method_name': method_name, 'k': k, 'top_k': bg_size, 'est_method': est_method, 'exp_obj': exp_obj,
+                'dataset_name': dataset_name},
     }
 
     explainer = load_explainer(model=model, **explainer_args[method_name])
