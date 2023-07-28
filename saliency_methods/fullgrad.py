@@ -1,49 +1,10 @@
-#
-# Copyright (c) 2019 Idiap Research Institute, http://www.idiap.ch/
-# Written by Suraj Srinivas <suraj.srinivas@idiap.ch>
-#
-
-""" Implement FullGrad saliency algorithm """
-
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 from math import isclose
-import functools
-import operator
+
 
 from .tensor_extractor import FullGradExtractor
 DEFAULT_DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-
-def gather_nd(params, indices):
-    """
-    Args:
-        params: Tensor to index
-        indices: k-dimension tensor of integers.
-    Returns:
-        output: 1-dimensional tensor of elements of ``params``, where
-            output[i] = params[i][indices[i]]
-
-            params   indices   output
-
-            1 2       1 1       4
-            3 4       2 0 ----> 5
-            5 6       0 0       1
-    """
-    max_value = functools.reduce(operator.mul, list(params.size())) - 1
-    indices = indices.t().long()
-    ndim = indices.size(0)
-    idx = torch.zeros_like(indices[0]).long()
-    m = 1
-
-    for i in range(ndim)[::-1]:
-        idx += indices[i]*m
-        m *= params.size(i)
-
-    idx[idx < 0] = 0
-    idx[idx > max_value] = 0
-    return torch.take(params, idx)
 
 
 class FullGrad():
@@ -51,13 +12,14 @@ class FullGrad():
     Compute FullGrad saliency map and full gradient decomposition
     """
 
-    def __init__(self, model, exp_obj='logit', im_size=(3, 224, 224)):
+    def __init__(self, model, exp_obj='logit', im_size=(3, 224, 224), post_process=True):
         self.model = model
         self.exp_obj = exp_obj
         self.im_size = (1,) + im_size
         self.model_ext = FullGradExtractor(model, im_size)
         self.biases = self.model_ext.getBiases()
-        self.checkCompleteness()
+        self.post_process = post_process
+        # self.checkCompleteness()
 
     def checkCompleteness(self):
         """
@@ -101,15 +63,11 @@ class FullGrad():
         if target_class is None:
             target_class = output.data.max(1, keepdim=False)[1]
 
+        batch_output = None
         if self.exp_obj == 'prob' or check is True:
-            batch_output = -1. * F.nll_loss(output, target_class.flatten(), reduction='sum')
+            batch_output = -1. * F.nll_loss(F.log_softmax(output, dim=1), target_class.flatten(), reduction='sum')
         elif self.exp_obj == 'logit':
-            sample_indices = torch.arange(0, output.size(0)).cuda()
-            indices_tensor = torch.cat([
-                sample_indices.unsqueeze(1),
-                target_class.unsqueeze(1)], dim=1)
-            output_scalar = gather_nd(output, indices_tensor)
-            batch_output = torch.sum(output_scalar)
+            batch_output = -1. * F.nll_loss(output, target_class.flatten(), reduction='sum')
 
         elif self.exp_obj == 'contrast':
             b_num, c_num = output.shape[0], output.shape[1]
@@ -123,8 +81,7 @@ class FullGrad():
             output_scalar = output
             batch_output = torch.sum(output_scalar)
 
-        out = batch_output
-        output_scalar = out
+        output_scalar = batch_output
 
         # ---------------------------------------------
         # if target_class is None:
@@ -133,7 +90,7 @@ class FullGrad():
 
         input_gradient, feature_gradients = self.model_ext.getFeatureGrads(image, output_scalar)
 
-        # Compute feature-gradients \times bias 
+        # Compute feature-gradients \times bias
         bias_times_gradients = []
         L = len(self.biases)
 
@@ -154,7 +111,8 @@ class FullGrad():
 
     def _postProcess(self, input, eps=1e-6):
         # Absolute value
-        input = abs(input)
+
+        input = abs(input) if self.post_process else input
 
         # Rescale operations to ensure gradients lie between 0 and 1
         flatin = input.view((input.size(0),-1))
@@ -174,7 +132,9 @@ class FullGrad():
 
         # Input-gradient * image
         grd = input_grad * image
-        gradient = self._postProcess(grd).sum(1, keepdim=True)
+
+        gradient = self._postProcess(grd).sum(1, keepdim=True) if self.post_process else grd.sum(1, keepdim=True)
+
         cam = gradient
 
         im_size = image.size()
@@ -184,7 +144,9 @@ class FullGrad():
 
             # Select only Conv layers
             if len(bias_grad[i].size()) == len(im_size):
-                temp = self._postProcess(bias_grad[i])
+
+                temp = self._postProcess(bias_grad[i]) if self.post_process else bias_grad[i]
+
                 gradient = F.interpolate(temp, size=(im_size[2], im_size[3]), mode='bilinear', align_corners=True)
                 cam += gradient.sum(1, keepdim=True)
         return cam

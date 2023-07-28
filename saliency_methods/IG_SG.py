@@ -1,40 +1,7 @@
-import functools
-import operator
 import torch
-from torch.autograd import grad
 import torch.nn.functional as F
 
 DEFAULT_DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-
-def gather_nd(params, indices):
-    """
-    Args:
-        params: Tensor to index
-        indices: k-dimension tensor of integers.
-    Returns:
-        output: 1-dimensional tensor of elements of ``params``, where
-            output[i] = params[i][indices[i]]
-
-            params   indices   output
-
-            1 2       1 1       4
-            3 4       2 0 ----> 5
-            5 6       0 0       1
-    """
-    max_value = functools.reduce(operator.mul, list(params.size())) - 1
-    indices = indices.t().long()
-    ndim = indices.size(0)
-    idx = torch.zeros_like(indices[0]).long()
-    m = 1
-
-    for i in range(ndim)[::-1]:
-        idx += indices[i]*m
-        m *= params.size(i)
-
-    idx[idx < 0] = 0
-    idx[idx > max_value] = 0
-    return torch.take(params, idx)
 
 
 class IntGradSG(object):
@@ -94,7 +61,7 @@ class IntGradSG(object):
         return sd
 
     def _get_grads(self, samples_input, sparse_labels=None):
-        samples_input.requires_grad = True
+
         shape = list(samples_input.shape)
         shape[1] = self.bg_size
         if self.est_method == 'valid_ip':
@@ -105,12 +72,14 @@ class IntGradSG(object):
         for b_id in range(self.bg_size):
             for k_id in range(self.k):
                 particular_slice = samples_input[:, b_id*self.k+k_id]
+                particular_slice.requires_grad = True
                 output = self.model(particular_slice)
 
+                batch_output = None
                 if self.exp_obj == 'logit':
-                    batch_output = output
+                    batch_output = -1 * F.nll_loss(output, sparse_labels.flatten(), reduction='sum')
                 elif self.exp_obj == 'prob':
-                    batch_output = torch.log_softmax(output, 1)
+                    batch_output = -1 * F.nll_loss(F.log_softmax(output, dim=1), sparse_labels.flatten(), reduction='sum')
                 elif self.exp_obj == 'contrast':
                     b_num, c_num = output.shape[0], output.shape[1]
                     mask = torch.ones(b_num, c_num, dtype=torch.bool)
@@ -124,24 +93,18 @@ class IntGradSG(object):
 
                 # should check that users pass in sparse labels
                 # Only look at the user-specified label
-                if sparse_labels is not None and batch_output.size(1) > 1:
-                    sample_indices = torch.arange(0, batch_output.size(0)).to(DEFAULT_DEVICE)
-                    indices_tensor = torch.cat([
-                            sample_indices.unsqueeze(1),
-                            sparse_labels.unsqueeze(1)], dim=1)
-                    batch_output = gather_nd(batch_output, indices_tensor)
 
                 self.model.zero_grad()
-                model_grads = grad(
-                        outputs=batch_output,
-                        inputs=particular_slice,
-                        grad_outputs=torch.ones_like(batch_output).to(DEFAULT_DEVICE),
-                        create_graph=True)
+                batch_output.backward()
+                gradients = particular_slice.grad.clone()
+                particular_slice.grad.zero_()
+                gradients.detach()
 
                 if self.est_method == 'valid_ip':
-                    grad_tensor[:, b_id, k_id, :] = model_grads[0].detach().data/self.k
+                    grad_tensor[:, b_id, k_id, :] = gradients/self.k
                 else:
-                    grad_tensor[:, b_id, :] += model_grads[0].detach().data / self.k
+                    grad_tensor[:, b_id, :] += gradients/self.k
+
         return grad_tensor
 
     def chew_input(self, input_tensor):

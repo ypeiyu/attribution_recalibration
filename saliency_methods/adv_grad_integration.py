@@ -1,45 +1,10 @@
-import functools
-import operator
-
 import torch
-from torch.autograd import grad
 import random
 import torch.nn.functional as F
 
 from utils.preprocess import undo_preprocess
 
-
-def gather_nd(params, indices):
-    """
-    Args:
-        params: Tensor to index
-        indices: k-dimension tensor of integers.
-    Returns:
-        output: 1-dimensional tensor of elements of ``params``, where
-            output[i] = params[i][indices[i]]
-
-            params   indices   output
-
-            1 2       1 1       4
-            3 4       2 0 ----> 5
-            5 6       0 0       1
-    """
-    max_value = functools.reduce(operator.mul, list(params.size())) - 1
-    indices = indices.t().long()
-    ndim = indices.size(0)
-    idx = torch.zeros_like(indices[0]).long()
-    m = 1
-
-    for i in range(ndim)[::-1]:
-        idx += indices[i]*m
-        m *= params.size(i)
-
-    idx[idx < 0] = 0
-    idx[idx > max_value] = 0
-    return torch.take(params, idx)
-
-
-cls_num_dict = {'imagenet':1000, 'cifar10':10, 'cifar100':100}
+cls_num_dict = {'imagenet': 1000, 'cifar10': 10, 'cifar100': 100, 'gtsrb': 43}
 
 
 class AGI(object):
@@ -94,10 +59,13 @@ class AGI(object):
             output = model(perturbed_image)
 
             # ---------------------- data_grad_label -----------------------
+            batch_output = None
             if self.exp_obj == 'logit':
-                batch_output = output
+                batch_output = -1. * F.nll_loss(output, targeted.flatten(), reduction='sum')
+
             elif self.exp_obj == 'prob':
-                batch_output = torch.log_softmax(output, 1)
+                batch_output = -1. * F.nll_loss(F.log_softmax(output, dim=1), targeted.flatten(), reduction='sum')
+
             elif self.exp_obj == 'contrast':
                 b_num, c_num = output.shape[0], output.shape[1]
                 mask = torch.ones(b_num, c_num, dtype=torch.bool)
@@ -108,25 +76,23 @@ class AGI(object):
                 pos_cls_output = output[torch.arange(b_num), targeted]
                 batch_output = (pos_cls_output - weighted_neg_output).unsqueeze(1)
 
-            if batch_output.size(1) > 1:
-                sample_indices = torch.arange(0, batch_output.size(0)).cuda()
-                indices_tensor = torch.cat([
-                    sample_indices.unsqueeze(1),
-                    targeted.unsqueeze(1)], dim=1)
-                target_output = gather_nd(batch_output, indices_tensor)
-            else:
-                target_output = batch_output
+            self.model.zero_grad()
+            batch_output.backward(retain_graph=True)
+            gradients = perturbed_image.grad.clone()
+            perturbed_image.grad.zero_()
+            gradients.detach()
 
-            model.zero_grad()
-            model_grads = grad(
-                outputs=target_output,
-                inputs=perturbed_image,
-                grad_outputs=torch.ones_like(target_output).cuda(),
-                create_graph=True)
-            data_grad_label = model_grads[0].detach().data
+            data_grad_label = gradients
 
             # ---------------------- data_grad_pred -----------------------
-            if self.exp_obj == 'contrast':
+            batch_output = None
+            if self.exp_obj == 'logit':
+                batch_output = -1. * F.nll_loss(output, init_pred.flatten(), reduction='sum')
+
+            elif self.exp_obj == 'prob':
+                batch_output = -1. * F.nll_loss(F.log_softmax(output, dim=1), init_pred.flatten(), reduction='sum')
+
+            elif self.exp_obj == 'contrast':
                 b_num, c_num = output.shape[0], output.shape[1]
                 mask = torch.ones(b_num, c_num, dtype=torch.bool)
                 mask[torch.arange(b_num), init_pred] = False
@@ -136,20 +102,13 @@ class AGI(object):
                 pos_cls_output = output[torch.arange(b_num), init_pred]
                 batch_output = (pos_cls_output - weighted_neg_output).unsqueeze(1)
 
-            if batch_output.size(1) > 1:
-                sample_indices = torch.arange(0, output.size(0)).cuda()
-                indices_tensor = torch.cat([
-                    sample_indices.unsqueeze(1),
-                    init_pred.unsqueeze(1)], dim=1)
-                target_output = gather_nd(batch_output, indices_tensor)
+            self.model.zero_grad()
+            batch_output.backward()
+            gradients = perturbed_image.grad.clone()
+            perturbed_image.grad.zero_()
+            gradients.detach()
 
-            model.zero_grad()
-            model_grads = grad(
-                outputs=target_output,
-                inputs=perturbed_image,
-                grad_outputs=torch.ones_like(target_output).cuda(),
-                create_graph=True)
-            data_grad_pred = model_grads[0].detach().data
+            data_grad_pred = gradients
 
             if self.est_method == 'valid_ip':
                 perturbed_image, valid_ip_mask, delta = self.fgsm_step(image, epsilon, data_grad_label, data_grad_pred)
