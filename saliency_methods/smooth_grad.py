@@ -22,6 +22,8 @@ class SmoothGrad():
 
         image = image.requires_grad_()
         output = self.model(image)
+        if sparse_labels is None:
+            sparse_labels = output.max(1, keepdim=False)[1]
 
         batch_output = None
         if self.exp_obj == 'logit':

@@ -44,7 +44,7 @@ class GradCAM():
         out = self.model(x)
 
         if sparse_labels is None:
-            sparse_labels = out.data.max(1, keepdim=True)[1].squeeze(1)
+            sparse_labels = out.max(1, keepdim=False)[1]
 
         output_scalar = None
         if self.exp_obj == 'prob':

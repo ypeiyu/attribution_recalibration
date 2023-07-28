@@ -131,6 +131,9 @@ class AGI(object):
         output = self.model(input_tensor)
         init_pred = output.max(1, keepdim=True)[1].squeeze(1)
 
+        if sparse_labels is None:
+            sparse_labels = init_pred
+
         # initialize the step_grad towards all target false classes
         step_grad = 0
 

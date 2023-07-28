@@ -27,7 +27,8 @@ class Gradients(object):
         input_tensor.requires_grad = True
 
         output = self.model(input_tensor)
-
+        if sparse_labels is None:
+            sparse_labels = output.max(1, keepdim=False)[1]
         batch_output = None
         if self.exp_obj == 'logit':
             batch_output = -1 * F.nll_loss(output, sparse_labels.flatten(), reduction='sum')

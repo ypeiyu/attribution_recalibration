@@ -69,6 +69,8 @@ class IntegratedGradients(object):
             particular_slice.requires_grad = True
 
             output = self.model(particular_slice)
+            if sparse_labels is None:
+                sparse_labels = output.max(1, keepdim=False)[1]
 
             batch_output = None
             if self.exp_obj == 'logit':
