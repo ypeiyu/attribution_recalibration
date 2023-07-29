@@ -39,7 +39,7 @@ class SmoothGrad():
             weighted_neg_output = (neg_weight * neg_cls_output).sum(dim=1)
             pos_cls_output = output[torch.arange(b_num), sparse_labels]
             output = pos_cls_output - weighted_neg_output
-            batch_output = output.unsqueeze(1)
+            batch_output = output.sum()
 
         # should check that users pass in sparse labels
         # Only look at the user-specified label

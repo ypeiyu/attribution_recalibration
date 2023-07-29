@@ -100,7 +100,7 @@ class AGI(object):
                 neg_weight = F.softmax(neg_cls_output, dim=1)
                 weighted_neg_output = (neg_weight * neg_cls_output).sum(dim=1)
                 pos_cls_output = output[torch.arange(b_num), init_pred]
-                batch_output = (pos_cls_output - weighted_neg_output).unsqueeze(1)
+                batch_output = (pos_cls_output - weighted_neg_output).sum()
 
             self.model.zero_grad()
             batch_output.backward()
