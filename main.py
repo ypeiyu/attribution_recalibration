@@ -151,6 +151,7 @@ def load_dataset(dataset_name, test_batch_size):
         mnist_te_loader = DataLoader(mnist_te_dataset, batch_size=test_batch_size, shuffle=False, num_workers=4)
 
         return mnist_tr_dataset, mnist_te_loader
+
     elif dataset_name == 'cifar10':
         # -------------------------- CIFAR-10 dataset ----------------------------------------
         mean, std = mean_std_dict[dataset_name]
