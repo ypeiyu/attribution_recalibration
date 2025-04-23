@@ -1,5 +1,6 @@
 import torch
 import torch.nn.functional as F
+import torch.nn as nn
 from math import isclose
 
 
@@ -13,7 +14,8 @@ class FullGrad():
     """
 
     def __init__(self, model, exp_obj='logit', im_size=(3, 224, 224), post_process=True):
-        self.model = model
+
+        self.model = model.module if isinstance(model, nn.DataParallel) else model
         self.exp_obj = exp_obj
         self.im_size = (1,) + im_size
         self.model_ext = FullGradExtractor(model, im_size)
@@ -78,8 +80,7 @@ class FullGrad():
             weighted_neg_output = (neg_weight * neg_cls_output).sum(dim=1)
             pos_cls_output = output[torch.arange(b_num), target_class]
             output = pos_cls_output - weighted_neg_output
-            output_scalar = output
-            batch_output = torch.sum(output_scalar)
+            batch_output = torch.sum(output)
 
         output_scalar = batch_output
 
@@ -123,6 +124,7 @@ class FullGrad():
         temp, _ = flatin.max(1, keepdim=True)
         input = input / (temp.unsqueeze(1).unsqueeze(1) + eps)
         return input
+
 
     def shap_values(self, image, sparse_labels=None):
         #FullGrad saliency
