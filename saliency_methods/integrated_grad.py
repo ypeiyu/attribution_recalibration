@@ -123,7 +123,7 @@ class IntegratedGradients(object):
         reference_tensor = reference_tensor.view(shape)
 
         samples_input = self._get_samples_input(input_tensor, reference_tensor)
-        samples_delta = self._get_samples_inter_delta(input_tensor, reference_tensor)
+        samples_delta = self._get_samples_inter_delta(samples_input, reference_tensor)
         grad_tensor = self._get_grads(samples_input, sparse_labels)
 
         mult_grads = samples_delta * grad_tensor
