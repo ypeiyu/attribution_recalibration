@@ -1,10 +1,11 @@
-# Re-Calibrating Feature Attributions for Model Interpretation (ICLR 2023 Spotlight)
+<h1 align="center">Re-Calibrating Feature Attributions for Model Interpretation</h1>
+<h3 align="center"><strong>🌟 ICLR 2023 spotlight 🌟</strong></h3>
 
 This code implements attribution re-calibration algorithm from the following paper:
 
 > Peiyu Yang, Naveed Akhtar, Zeyi Wen, Mubarak Shah, and Ajmal Mian
 >
-> [Re-calibrating Feature Attributions for Model Interpretation](https://scholar.google.com/citations?view_op=view_citation&hl=en&user=Xqmlj18AAAAJ&sortby=pubdate&citation_for_view=Xqmlj18AAAAJ:kzcrU_BdoSEC)
+> [Re-calibrating Feature Attributions for Model Interpretation](https://openreview.net/forum?id=WUWJIV2Yxtp)
 
 
 ## Introduction
